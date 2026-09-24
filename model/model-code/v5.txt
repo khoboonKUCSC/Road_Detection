@@ -1,0 +1,300 @@
+"""
+================================================================
+FULL PIPELINE: Road Damage Detection (YOLO11)
+รวม: Smart Group-Aware Split + Data Integrity Check
+     + Tuned Hyperparameters + Full Augmentation
+     + Train + Evaluate (val/test) + Export ONNX
+================================================================
+"""
+import os, re, gc, glob, random, yaml, shutil
+import cv2
+from datetime import datetime
+from collections import defaultdict
+import numpy as np
+import torch
+from ultralytics import YOLO
+
+cv2.setNumThreads(0)  # ปิด OpenCV multithreading เพื่อให้ PyTorch ใช้ GPU ได้เต็มที่
+
+## Check GPU
+
+def get_device():
+    """ตรวจสอบว่ามี GPU (CUDA) ใช้งานได้หรือไม่ ถ้าไม่มีให้ใช้ CPU แทน"""
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        print(f"✅ พบ GPU: {gpu_name} -> ใช้ device='0'")
+        return 0
+    else:
+        print("⚠️ ไม่พบ GPU (CUDA) -> จะใช้ CPU แทน (การเทรนจะช้ากว่ามาก)")
+        return "cpu"
+
+DEVICE  = get_device()
+
+    # เปิด cudnn optimization เฉพาะตอนมี GPU เท่านั้น
+if DEVICE != "cpu":
+    torch.backends.cudnn.deterministic = False
+    torch.backends.cudnn.benchmark = True
+
+# ==================== 0) CONFIG & REPRODUCIBILITY ====================
+SEED = 0
+random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
+
+BASE_DIR   = os.getcwd()
+SRC_DIR    = os.path.join(BASE_DIR, "data")           # ข้อมูลดิบต้นฉบับ
+WORK_DIR   = os.path.join(BASE_DIR, "dataset_clean")  # ข้อมูลหลัง split
+PROJECT    = "v5-yolo11s"
+RUN_NAME   = "merged_best"
+CLASS_NAMES = ['pothole', 'crack', 'manhole']
+
+HAS_GPU = torch.cuda.is_available()
+BATCH   = 0.8 
+WORKERS = 16
+
+EPOCHS   = 200
+IMGSZ    = 896
+PATIENCE = 50
+
+# Hyperparameter ที่ผ่าน Optuna tuning
+OPTIMIZER    = "AdamW"
+LR0          = 0.000523087386876883
+LRF          = 0.02559244954708425
+WEIGHT_DECAY = 0.005034138135400871
+MOMENTUM     = 0.9379056013311568
+DROPOUT      = 0
+
+# Grouping config
+TIME_GAP_SEC   = 90   # ห่างเกินนี้ = คนละฉาก (สำหรับไฟล์ timestamp)
+FRAME_GAP      = 5    # เลขรันห่างเกินนี้ = คนละฉาก (สำหรับไฟล์เลขรัน)
+MAX_GROUP_SIZE = 25   # ล็อกไม่ให้กลุ่มไหนใหญ่เกินนี้
+
+print(f"🖥️  Device: {'GPU' if HAS_GPU else 'CPU'} | Batch: {BATCH}")
+
+# ==================== 1) SMART GROUP KEY FUNCTIONS ====================
+def extract_timestamp(filename):
+    """ดึงเวลาจากชื่อไฟล์ รองรับหลายรูปแบบ"""
+    name = os.path.splitext(os.path.basename(filename))[0]
+    patterns = [
+        r"^vlcsnap[_-](\d{4})-(\d{2})-(\d{2})-(\d{2})h(\d{2})m(\d{2})s\d*$",
+        r"^(\d{8})_(\d{6})$",
+    ]
+    for pattern in patterns:
+        m = re.match(pattern, name, re.IGNORECASE)
+        if m:
+            if len(m.groups()) == 7:
+                y, mo, d, h, mi, s, _ = m.groups()
+                return datetime(int(y), int(mo), int(d), int(h), int(mi), int(s))
+            return datetime.strptime("".join(m.groups()), "%Y%m%d%H%M%S")
+    return None
+
+def extract_frame_number(filename):
+    """ดึง prefix + เลขรัน เช่น vlcsnap-00001 หรือ vlcsnap-00097-MSI"""
+    name = os.path.splitext(os.path.basename(filename))[0]
+    m = re.match(r"^([A-Za-z]+)-(\d+)(?:-[A-Za-z0-9]+)?$", name)
+    if m:
+        return m.group(1), int(m.group(2))
+    return None, None
+
+def build_groups(img_paths, time_gap_sec=90, frame_gap=5, max_group_size=25):
+    """Gap-based clustering + Max Size Cap"""
+    with_time, with_frame, others = [], [], []
+    for p in img_paths:
+        fname = os.path.basename(p)
+        ts = extract_timestamp(fname)
+        if ts:
+            with_time.append((ts, p)); continue
+        prefix, num = extract_frame_number(fname)
+        if prefix is not None:
+            with_frame.append((prefix, num, p)); continue
+        others.append(p)
+
+    raw_groups = defaultdict(list)
+    gid = 0
+
+    with_time.sort(key=lambda x: x[0])
+    prev_ts = None
+    for ts, p in with_time:
+        if prev_ts is None or (ts - prev_ts).total_seconds() > time_gap_sec:
+            gid += 1
+        raw_groups[f"time_g{gid}"].append(p)
+        prev_ts = ts
+
+    with_frame.sort(key=lambda x: (x[0], x[1]))
+    prev_prefix, prev_num = None, None
+    for prefix, num, p in with_frame:
+        if prefix != prev_prefix or (num - prev_num) > frame_gap:
+            gid += 1
+        raw_groups[f"frame_g{gid}"].append(p)
+        prev_prefix, prev_num = prefix, num
+
+    for p in others:
+        gid += 1
+        raw_groups[f"other_g{gid}"].append(p)
+
+    final_map = {}
+    for key, files in raw_groups.items():
+        if len(files) <= max_group_size:
+            for f in files:
+                final_map[f] = key
+        else:
+            for i, f in enumerate(files):
+                chunk_id = i // max_group_size
+                final_map[f] = f"{key}_c{chunk_id}"
+    return final_map
+
+# ==================== 2) BUILD GROUPS & CHECK STATS ====================
+img_paths = sorted(glob.glob(os.path.join(SRC_DIR, 'images', '*.*')))
+print(f"\n📂 พบไฟล์ภาพทั้งหมด: {len(img_paths)} ไฟล์")
+
+group_map = build_groups(img_paths, TIME_GAP_SEC, FRAME_GAP, MAX_GROUP_SIZE)
+groups = defaultdict(list)
+for p, k in group_map.items():
+    groups[k].append(p)
+
+sizes = [len(v) for v in groups.values()]
+print(f"📊 จำนวนกลุ่มทั้งหมด: {len(groups)}")
+print(f"   เฉลี่ย: {sum(sizes)/len(sizes):.2f} ไฟล์/กลุ่ม | มากสุด: {max(sizes)} | น้อยสุด: {min(sizes)}")
+
+# ==================== 3) GROUP-AWARE SPLIT (75/15/10) ====================
+group_keys = list(groups.keys())
+random.shuffle(group_keys)
+
+n = len(group_keys)
+n_train = int(n * 0.75)
+n_val   = int(n * 0.15)
+train_keys = group_keys[:n_train]
+val_keys   = group_keys[n_train:n_train + n_val]
+test_keys  = group_keys[n_train + n_val:]
+
+split_map = {}
+for k in train_keys:
+    for p in groups[k]: split_map[p] = 'train'
+for k in val_keys:
+    for p in groups[k]: split_map[p] = 'val'
+for k in test_keys:
+    for p in groups[k]: split_map[p] = 'test'
+
+def label_path(img_p):
+    base = os.path.splitext(os.path.basename(img_p))[0]
+    return os.path.join(SRC_DIR, 'labels', base + '.txt')
+
+for split in ['train', 'val', 'test']:
+    os.makedirs(os.path.join(WORK_DIR, 'images', split), exist_ok=True)
+    os.makedirs(os.path.join(WORK_DIR, 'labels', split), exist_ok=True)
+
+missing_label, copied = 0, 0
+for img_p, split in split_map.items():
+    lbl_p = label_path(img_p)
+    if not os.path.exists(lbl_p):
+        missing_label += 1
+        continue
+    shutil.copy2(img_p, os.path.join(WORK_DIR, 'images', split, os.path.basename(img_p)))
+    shutil.copy2(lbl_p, os.path.join(WORK_DIR, 'labels', split, os.path.basename(lbl_p)))
+    copied += 1
+
+print(f"\n✅ Split เสร็จ | train={len(train_keys)} groups, val={len(val_keys)} groups, test={len(test_keys)} groups")
+print(f"✅ ไฟล์ที่คัดลอกสำเร็จ: {copied} | ⚠️ ภาพที่ไม่มี label: {missing_label}")
+
+# ==================== 4) DATA INTEGRITY CHECK ====================
+print("\n🔍 ตรวจสอบคุณภาพข้อมูล:")
+for split in ['train', 'val', 'test']:
+    lbl_files = glob.glob(os.path.join(WORK_DIR, 'labels', split, '*.txt'))
+    img_files = glob.glob(os.path.join(WORK_DIR, 'images', split, '*.*'))
+    bad_class = 0
+    for lf in lbl_files:
+        with open(lf) as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                cid = int(line.split()[0])
+                if cid >= len(CLASS_NAMES):
+                    bad_class += 1
+    print(f"  [{split}] images={len(img_files)} | labels={len(lbl_files)} | class id ผิดพลาด={bad_class}")
+
+# ==================== 5) สร้าง data.yaml ====================
+yaml_data = {
+    'path': WORK_DIR,
+    'train': 'images/train',
+    'val': 'images/val',
+    'test': 'images/test',
+    'nc': len(CLASS_NAMES),
+    'names': CLASS_NAMES
+}
+yaml_path = os.path.join(WORK_DIR, 'data.yaml')
+with open(yaml_path, 'w') as f:
+    yaml.dump(yaml_data, f, sort_keys=False)
+print(f"\n✅ สร้างไฟล์ {yaml_path} สำเร็จ")
+
+# ==================== 6) โหลดโมเดล (พร้อม Offline Fallback) ====================
+weights_path = os.path.join(BASE_DIR, "yolo11s.pt")
+if os.path.exists(weights_path):
+    model = YOLO(weights_path)
+    print("✅ โหลด yolo11s.pt จากเครื่อง (offline)")
+else:
+    try:
+        model = YOLO('yolo11s.pt')
+        print("✅ โหลด yolo11s.pt จากอินเทอร์เน็ต")
+    except Exception:
+        model = YOLO('yolo11s.yaml')
+        print("⚠️ โหลดออนไลน์ไม่สำเร็จ ใช้ yolo11s.yaml (train จากศูนย์) แทน")
+
+# ==================== 7) TRAIN ====================
+print("\n🚀 เริ่มเทรนโมเดล...")
+results = model.train(
+    data=yaml_path,
+    project=PROJECT,
+    name=RUN_NAME,
+    epochs=EPOCHS,
+    patience=PATIENCE,
+    imgsz=IMGSZ,
+    batch=BATCH,
+    device=DEVICE,
+    amp=HAS_GPU,
+    workers=WORKERS,
+    deterministic=True,
+    seed=SEED,
+    cache=False,
+
+    # Optimizer ที่ tune มาจาก Optuna
+    optimizer=OPTIMIZER,
+    lr0=LR0,
+    lrf=LRF,
+    weight_decay=WEIGHT_DECAY,
+    momentum=MOMENTUM,
+    dropout=DROPOUT,
+
+    # Loss weight
+    box=9.0, cls=0.6, dfl=1.6,
+
+    # Augmentation (รวมจากหลายเวอร์ชัน)
+    mosaic=1.0,
+    close_mosaic=20,
+    mixup=0.1,
+    copy_paste=0.3,
+    degrees=2,
+    translate=0.1,
+    scale=0.5,
+    hsv_h=0.015,
+    hsv_s=0.7,
+    hsv_v=0.4,
+)
+
+torch.cuda.empty_cache()
+gc.collect()
+
+# ==================== 8) EVALUATE (val + test พร้อม TTA) ====================
+best_pt = os.path.join(results.save_dir, 'weights', 'best.pt')
+best = YOLO(best_pt)
+
+print("\n📊 ผลบน VAL SET:")
+val_metrics = best.val(data=yaml_path, split='val', conf=0.001, iou=0.6, imgsz=IMGSZ)
+
+print("\n📊 ผลบน TEST SET (พร้อม Test-Time Augmentation):")
+test_metrics = best.val(data=yaml_path, split='test', conf=0.001, iou=0.6, imgsz=IMGSZ, augment=True)
+
+print(f"\n✅ VAL  mAP50: {val_metrics.box.map50:.4f} | mAP50-95: {val_metrics.box.map:.4f}")
+print(f"✅ TEST mAP50: {test_metrics.box.map50:.4f} | mAP50-95: {test_metrics.box.map:.4f}")
+
+# ==================== 9) EXPORT ONNX ====================
+best.export(format="onnx")
+print("\n✅ Export ONNX สำเร็จ พร้อมใช้งาน deploy")
+print(f"📁 ไฟล์โมเดลอยู่ที่: {results.save_dir}")

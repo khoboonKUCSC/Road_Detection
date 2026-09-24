@@ -1,0 +1,307 @@
+import os
+import shutil
+import random
+import yaml
+import gc
+import torch
+import numpy as np
+from ultralytics import YOLO, settings
+
+# ============================================================
+# 🔧 ตรวจสอบอุปกรณ์ (GPU/CPU) อัตโนมัติ
+# ============================================================
+def get_device():
+    """ตรวจสอบว่ามี GPU (CUDA) ใช้งานได้หรือไม่ ถ้าไม่มีให้ใช้ CPU แทน"""
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        print(f"✅ พบ GPU: {gpu_name} -> ใช้ device='0'")
+        return 0
+    else:
+        print("⚠️ ไม่พบ GPU (CUDA) -> จะใช้ CPU แทน (การเทรนจะช้ากว่ามาก)")
+        return "cpu"
+
+DEVICE = get_device()
+
+# ============================================================
+# Riproducibilità
+# ============================================================
+RANDOM_SEED = 0
+torch.manual_seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
+random.seed(RANDOM_SEED)
+
+# เปิด cudnn optimization เฉพาะตอนมี GPU เท่านั้น
+if DEVICE != "cpu":
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+# ============================================================
+# Impostazioni generali
+# ============================================================
+PROJECT = "pothole-detector-NatureSR"
+IOU_THRESHOLD = 0.7
+CONF_THRESHOLD = 0.25
+INPUT_SIZE = 800
+PATIENCE = 10
+EPOCHS = 100
+
+# ปรับ batch size และ workers อัตโนมัติตามอุปกรณ์
+BATCH_SIZE = 8 if DEVICE != "cpu" else 4      # CPU ใช้ batch เล็กลงกันแรม/ซีพียูโหลดหนัก
+WORKERS = 4 if DEVICE != "cpu" else 0         # workers>0 บน Windows+CPU มักมีปัญหา multiprocessing
+
+# ============================================================
+# Dataset paths (ใช้ relative path แทน path แบบ Kaggle)
+# ============================================================
+data_dir = os.path.join(os.getcwd(), "data")
+
+# ============================================================
+# Configurazione parametri (run gj4071db)
+# ============================================================
+config = {
+    'batch': BATCH_SIZE,
+    'optimizer': "RAdam",
+    'lr0': 0.007023087386876883,
+    'lrf': 0.02559244954708425,
+    'weight_decay': 0.005034138135400871,
+    'momentum': 0.09079056013311568,
+    'dropout': 0.11321865578015432
+}
+
+# ============================================================
+# แบ่งข้อมูล Train/Val
+# ============================================================
+def split_train_val(data_dir, images_folder="images", labels_folder="labels-YOLO",
+                     val_ratio=0.2, seed=0):
+    random.seed(seed)
+    images_path = os.path.join(data_dir, images_folder)
+    labels_path = os.path.join(data_dir, labels_folder)
+
+    valid_ext = ('.jpg', '.jpeg', '.png', '.bmp')
+    image_files = [f for f in os.listdir(images_path) if f.lower().endswith(valid_ext)]
+
+    print(f"📊 จำนวนรูปภาพทั้งหมด: {len(image_files)}")
+
+    missing_labels = []
+    for img_file in image_files:
+        label_file = os.path.splitext(img_file)[0] + ".txt"
+        if not os.path.exists(os.path.join(labels_path, label_file)):
+            missing_labels.append(img_file)
+
+    if missing_labels:
+        print(f"⚠️ พบรูปภาพ {len(missing_labels)} ไฟล์ที่ไม่มี label คู่กัน")
+
+    random.shuffle(image_files)
+    val_size = int(len(image_files) * val_ratio)
+    val_files = image_files[:val_size]
+    train_files = image_files[val_size:]
+
+    print(f"✅ Train: {len(train_files)} รูป | Val: {len(val_files)} รูป")
+
+    for split in ['train', 'val']:
+        os.makedirs(os.path.join(data_dir, 'images', split), exist_ok=True)
+        os.makedirs(os.path.join(data_dir, 'labels', split), exist_ok=True)
+
+    def move_files(file_list, split_name):
+        for img_file in file_list:
+            label_file = os.path.splitext(img_file)[0] + ".txt"
+            src_img = os.path.join(images_path, img_file)
+            dst_img = os.path.join(data_dir, 'images', split_name, img_file)
+            src_label = os.path.join(labels_path, label_file)
+            dst_label = os.path.join(data_dir, 'labels', split_name, label_file)
+            shutil.copy2(src_img, dst_img)
+            if os.path.exists(src_label):
+                shutil.copy2(src_label, dst_label)
+
+    move_files(train_files, 'train')
+    move_files(val_files, 'val')
+    print("🎉 แบ่งข้อมูลเสร็จสมบูรณ์!")
+
+# ============================================================
+# สร้างไฟล์ data.yaml
+# ============================================================
+def create_yaml():
+    """สร้างไฟล์ YAML ที่ชี้ไปยัง train/val แยกโฟลเดอร์"""
+    yaml_path = "data.yaml"
+    data = {
+        'path': data_dir,
+        'train': 'images/train',
+        'val': 'images/val',
+        'nc': 3,
+        'names': ['pothole', 'crack', 'manhole']
+    }
+    with open(yaml_path, 'w') as f:
+        yaml.dump(data, f)
+    print(f"✅ File YAML created: {yaml_path}")
+    return yaml_path
+
+# ============================================================
+# Training del modello YOLO
+# ============================================================
+def train_model(data_yaml_path, config, device=DEVICE):
+    print(f"\n🔧 Avvio training con configurazione:")
+    for key, value in config.items():
+        print(f"   - {key}: {value}")
+
+    # Inizializza modello
+    model = YOLO("yolo11m.pt")
+
+    # Training
+    print("\n🚀 Training in corso...")
+    try:
+        results = model.train(
+            data=data_yaml_path,
+            epochs=EPOCHS,
+            batch=config['batch'],
+            imgsz=INPUT_SIZE,
+            optimizer=config['optimizer'],
+            lr0=config['lr0'],
+            lrf=config['lrf'],
+            weight_decay=config['weight_decay'],
+            momentum=config['momentum'],
+            dropout=config['dropout'],
+            patience=PATIENCE,
+            device=device,
+            amp=True if device != "cpu" else False,   # amp (mixed precision) ใช้ได้เฉพาะ GPU
+            seed=RANDOM_SEED,
+            deterministic=True,
+            project=PROJECT,
+            name="training",
+            exist_ok=True,
+            # --- เพิ่ม Data Augmentation ที่แนะนำ ---
+            mosaic=1.0,         # รวมภาพช่วยเรียนรู้บริบท
+            mixup=0.1,          # ช่วยลดการจำภาพจำลอง (Overfitting)
+            degrees=15.0,       # หมุนภาพเล็กน้อย
+            translate=0.1,      # เลื่อนภาพ
+            scale=0.5,          # สุ่มสเกล
+            hsv_h=0.015,        # ปรับสีให้ทนต่อแสงที่เปลี่ยนไป
+            hsv_s=0.7,
+            hsv_v=0.4,
+            val=True,
+            save=True,
+            plots=True,
+            verbose=True,
+            workers=WORKERS,
+        )
+    except torch.cuda.OutOfMemoryError:
+        print("❌ GPU memory ไม่พอ! ลองลด batch size หรือ imgsz แล้วรันใหม่")
+        raise
+    except RuntimeError as e:
+        print(f"❌ เกิดข้อผิดพลาดระหว่างเทรน: {e}")
+        raise
+
+    # Validation
+    print("\n📊 Validazione finale...")
+    val_results = model.val(
+        data=data_yaml_path,
+        iou=IOU_THRESHOLD,
+        conf=CONF_THRESHOLD,
+        device=device,
+    )
+
+    metrics = val_results.box
+    class_names = ['pothole', 'crack', 'manhole']
+
+    # Stampa risultati per classe (เช็ค index ให้ไม่เกินจำนวน class ที่ตรวจพบจริง)
+    print("\n✅ Risultati per classe:")
+    print("-" * 70)
+    print(f"{'Classe':<12} {'Precision':<12} {'Recall':<12} {'F1':<12} {'mAP50':<12}")
+    print("-" * 70)
+
+    n_detected_classes = len(metrics.ap50) if hasattr(metrics, 'ap50') else 0
+
+    for i, name in enumerate(class_names):
+        if i < n_detected_classes:
+            precision = float(metrics.p[i])
+            recall = float(metrics.r[i])
+            f1 = float(metrics.f1[i])
+            ap50 = float(metrics.ap50[i])
+            print(f"{name:<12} {precision:<12.4f} {recall:<12.4f} {f1:<12.4f} {ap50:<12.4f}")
+        else:
+            print(f"{name:<12} {'N/A (ไม่พบข้อมูล class นี้ใน validation set)':<40}")
+
+    # Stampa medie
+    print("-" * 70)
+    print(f"{'MEDIA':<12} {float(metrics.mp):<12.4f} {float(metrics.mr):<12.4f} "
+          f"{float(metrics.f1.mean()):<12.4f} {float(metrics.map50):<12.4f}")
+    print("-" * 70)
+
+    print(f"\n✅ Training completato!")
+    print(f"   - mAP50: {float(metrics.map50):.4f}")
+    print(f"   - mAP50-95: {float(metrics.map):.4f}")
+    print(f"   - Fitness: {float(metrics.fitness()):.4f}")
+
+    # Exporting ONNX
+    try:
+        model.export(format="onnx")
+        print("✅ Export ONNX สำเร็จ")
+    except Exception as e:
+        print(f"⚠️ Export ONNX ไม่สำเร็จ: {e}")
+
+    # Cleanup
+    del model
+    if device != "cpu":
+        torch.cuda.empty_cache()
+    gc.collect()
+
+    return val_results
+
+
+# ============================================================
+# 🚀 Entry point (จำเป็นบน Windows เพื่อป้องกันปัญหา multiprocessing)
+# ============================================================
+if __name__ == "__main__":
+    split_train_val(data_dir)
+    yaml_path = create_yaml()
+    # Offline-safe fallback: avoid downloading yolo11m.pt from GitHub when the environment is disconnected.
+    weights_dir = os.path.join(os.getcwd(), "weights")
+    os.makedirs(weights_dir, exist_ok=True)
+    settings.update({"weights_dir": weights_dir})
+
+    def train_model_offline(data_yaml_path, config, device=DEVICE):
+        local_weight = os.path.join(weights_dir, "yolo11m.pt")
+        if os.path.exists(local_weight):
+            model = YOLO(local_weight)
+            print(f"✅ Using local weights: {local_weight}")
+        else:
+            model = YOLO("yolo11n.yaml")
+            print("⚠️ No local YOLO weights found; training from scratch with yolo11n.yaml (offline-safe).")
+
+        print(f"\n🔧 Offline-safe training start")
+        results = model.train(
+            data=data_yaml_path,
+            epochs=EPOCHS,
+            batch=config['batch'],
+            imgsz=INPUT_SIZE,
+            optimizer=config['optimizer'],
+            lr0=config['lr0'],
+            lrf=config['lrf'],
+            weight_decay=config['weight_decay'],
+            momentum=config['momentum'],
+            dropout=config['dropout'],
+            patience=PATIENCE,
+            device=device,
+            amp=True if device != "cpu" else False,
+            seed=RANDOM_SEED,
+            deterministic=True,
+            project=PROJECT,
+            name="training_offline",
+            exist_ok=True,
+            mosaic=1.0,
+            mixup=0.1,
+            degrees=15.0,
+            translate=0.1,
+            scale=0.5,
+            hsv_h=0.015,
+            hsv_s=0.7,
+            hsv_v=0.4,
+            val=True,
+            save=True,
+            plots=True,
+            verbose=True,
+            workers=WORKERS,
+        )
+        return results
+
+    # Replace the original training call with the offline-safe version
+    train_model = train_model_offline
+    train_model(data_yaml_path=yaml_path, config=config)

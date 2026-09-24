@@ -1,0 +1,138 @@
+import os
+import shutil
+import yaml
+import gc
+from ultralytics import YOLO, settings
+import torch
+import numpy as np
+
+# Riproducibilità
+torch.manual_seed(0)
+np.random.seed(0)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+# Impostazioni generali
+PROJECT = "pothole-detector-NatureSR"
+RANDOM_SEED = 0
+IOU_THRESHOLD = 0.7
+CONF_THRESHOLD = 0.25
+INPUT_SIZE = 640
+PATIENCE = 10
+EPOCHS = 100
+
+# Dataset paths
+data_dir = "/kaggle/input/road-damage-dataset-potholes-cracks-and-manholes/data"
+
+# Configurazione parametri (run gj4071db)
+config = {
+    'batch': 16,
+    'optimizer': "RAdam",
+    'lr0': 0.007613363286285629,
+    'lrf': 0.06982332385381142,
+    'weight_decay': 0.0071554110355948435,
+    'momentum': 0.1586633287328679,
+    'dropout': 0.25488093038438164
+}
+
+def create_yaml():
+    """Crea il file YAML che punta direttamente alla tua struttura"""
+    yaml_path = "data.yaml"
+    
+    data = {
+        'path': data_dir,
+        'train': 'images',
+        'val': 'images',  # Usa lo stesso set per train e val
+        'nc': 3,
+        'names': ['pothole', 'crack', 'manhole']
+    }
+    
+    with open(yaml_path, 'w') as f:
+        yaml.dump(data, f)
+    
+    print(f"✅ File YAML creato: {yaml_path}")
+    return yaml_path
+
+    def train_model(data_yaml_path, config):
+    """Training del modello YOLO"""
+    
+    print(f"\n🚀 Avvio training con configurazione:")
+    for key, value in config.items():
+        print(f"   - {key}: {value}")
+    
+    # Inizializza modello
+    model = YOLO("yolo11s.pt")
+    
+    # Training
+    print("\n⏳ Training in corso...")
+    results = model.train(
+        data=data_yaml_path,
+        epochs=EPOCHS,
+        batch=config['batch'],
+        imgsz=INPUT_SIZE,
+        optimizer=config['optimizer'],
+        lr0=config['lr0'],
+        lrf=config['lrf'],
+        weight_decay=config['weight_decay'],
+        momentum=config['momentum'],
+        dropout=config['dropout'],
+        patience=PATIENCE,
+        device=0,
+        amp=True,
+        seed=RANDOM_SEED,
+        deterministic=True,
+        project=PROJECT,
+        name="training",
+        exist_ok=True,
+        val=True,
+        save=True,
+        plots=True,
+        verbose=True,
+        workers=4,
+    )
+    
+    # Validation
+    print("\n📊 Validazione finale...")
+    val_results = model.val(
+        data=data_yaml_path,
+        iou=IOU_THRESHOLD,
+        conf=CONF_THRESHOLD
+    )
+    
+    metrics = val_results.box
+    class_names = ['pothole', 'crack', 'manhole']
+    
+    # Stampa risultati per classe
+    print("\n📈 Risultati per classe:")
+    print("-" * 70)
+    print(f"{'Classe':<12} {'Precision':<12} {'Recall':<12} {'F1':<12} {'mAP50':<12}")
+    print("-" * 70)
+    
+    for i, name in enumerate(class_names):
+        precision = float(metrics.p[i])
+        recall = float(metrics.r[i])
+        f1 = float(metrics.f1[i])
+        ap50 = float(metrics.ap50[i])
+        
+        print(f"{name:<12} {precision:<12.4f} {recall:<12.4f} {f1:<12.4f} {ap50:<12.4f}")
+    
+    # Stampa medie
+    print("-" * 70)
+    print(f"{'MEDIA':<12} {float(metrics.mp):<12.4f} {float(metrics.mr):<12.4f} "
+          f"{float(metrics.f1.mean()):<12.4f} {float(metrics.map50):<12.4f}")
+    print("-" * 70)
+    
+    print(f"\n✅ Training completato!")
+    print(f"   - mAP50: {float(metrics.map50):.4f}")
+    print(f"   - mAP50-95: {float(metrics.map):.4f}")
+    print(f"   - Fitness: {float(metrics.fitness()):.4f}")
+
+    #Exporting ONNX
+    model.export(format="onnx")
+    
+    # Cleanup
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()
+    
+    return val_results
