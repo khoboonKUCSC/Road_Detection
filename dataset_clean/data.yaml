@@ -1,6 +1,0 @@
-path: /home/ds/Desktop/Road_Detection/dataset_clean
-train: images/train
-val: images/val
-test: images/test
-nc: 3
-names: ['pothole', 'crack', 'manhole']
