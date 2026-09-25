@@ -1,0 +1,531 @@
+"""
+=====================================================
+YOLOv11 - Road Defect Detection (v8) — FULL PIPELINE
+=====================================================
+พื้นฐานจาก v7 (Test mAP50 = 0.4504, mAP50-95 = 0.1784)
+ปัญหาที่พบใน v7: overfitting ชัดเจน
+  - val/box_loss ต่ำสุด ~epoch 22-25 (2.02) แล้วไต่ขึ้นถึง 2.23 ที่ epoch 69
+  - val/dfl_loss ต่ำสุด ~epoch 25 (2.10) แล้วไต่ขึ้นถึง 2.34
+  - train loss ลดต่อเนื่อง แต่ val loss ขึ้น = โมเดลเริ่มจำข้อมูล
+
+การแก้ใน v8:
+  1. patience 30 -> 15        (best epoch อยู่ ~40 ไม่ต้องรันยาวถึง 69)
+  2. epochs 200 -> 120        (ลดเวลาเปล่า)
+  3. weight_decay 0.0005 -> 0.001   (regularization แรงขึ้น)
+  4. dropout 0.0 -> 0.08      (คราวนี้ใส่โดยมีเหตุผลรองรับ ไม่ใช่มั่วแบบ v4)
+  5. Augmentation เบาๆ เพิ่ม: scale 0.5->0.6, translate 0.1->0.15
+     (ยังคง mixup=0, copy_paste=0, degrees=0 เพราะทำลายโครงสร้าง crack)
+  6. box loss 7.5 -> 8.5      (แก้ mAP50-95 ที่ยังต่ำ = localization ไม่แม่น)
+  7. crack oversample 1.5 -> 2.0  (รอบก่อนได้ผลจริง crack recall 0.276->0.350)
+  8. เปิด cos_lr=True         (LR decay นุ่มนวลขึ้น ลดการ overfit ช่วงท้าย)
+=====================================================
+"""
+
+import os
+import re
+import glob
+import random
+import shutil
+import numpy as np
+import cv2
+from pathlib import Path
+from datetime import datetime
+from collections import defaultdict
+from ultralytics import YOLO
+
+# =====================================================
+# 1. CONFIG (v8)
+# =====================================================
+CONFIG = {
+    # --- Model ---
+    "model": "yolo11m.pt",
+
+    # --- Optimizer & LR ---
+    "optimizer": "AdamW",
+    "lr0": 0.0015,
+    "lrf": 0.01,
+    "momentum": 0.937,
+    "weight_decay": 0.001,      # v7: 0.0005 -> เพิ่ม regularization แก้ overfit
+    "dropout": 0.08,            # v7: 0.0 -> เปิดเบาๆ กันโมเดลจำข้อมูล
+    "cos_lr": True,             # ใหม่ใน v8: cosine LR decay นุ่มนวลกว่า linear
+
+    # --- Loss weights ---
+    "box": 8.5,                 # v7: 7.5 -> เน้น localization แก้ mAP50-95 ต่ำ
+    "cls": 0.6,
+    "dfl": 1.5,
+
+    # --- Training length ---
+    "epochs": 120,              # v7: 200 -> best อยู่ ~epoch 40 ไม่ต้องยาวขนาดนั้น
+    "patience": 20,             # v7: 30 -> หยุดเร็วขึ้น ตัดช่วง overfit ทิ้ง
+    "imgsz": 1280,
+    "batch": 8,
+    "workers": 16,
+    "deterministic": True,
+    "seed": 0,
+    "amp": True,
+    "device": 0,
+
+    # --- Augmentation: เบาๆ เพิ่มขึ้นเล็กน้อยจาก v7 ---
+    "mosaic": 1.0,
+    "close_mosaic": 15,
+    "mixup": 0.0,               # คงไว้ 0 (v4 พิสูจน์แล้วว่าทำลาย crack)
+    "copy_paste": 0.0,          # คงไว้ 0
+    "degrees": 0.0,             # คงไว้ 0 (ถนนไม่หมุน)
+    "translate": 0.15,          # v7: 0.1 -> เพิ่มเล็กน้อย
+    "scale": 0.6,               # v7: 0.5 -> เพิ่มเล็กน้อย
+    "fliplr": 0.5,
+    "hsv_h": 0.015,
+    "hsv_s": 0.7,
+    "hsv_v": 0.4,
+}
+
+VAL_CONF_THRESHOLD = 0.001
+VAL_IOU_THRESHOLD = 0.6
+DEPLOY_CONF_THRESHOLD = 0.25
+
+# --- PATH (ตรงกับ v7) ---
+SRC_DIR = "data"                    # data/images, data/labels
+WORK_DIR = "dataset_clean"          # dataset_clean/images/{train,val,test}
+
+IMAGES_GLOB = os.path.join(SRC_DIR, "images", "*.*")
+CLASSES = ["pothole", "crack", "manhole"]
+CRACK_CLASS_ID = 1
+
+TIME_GAP_SEC = 90
+FRAME_GAP = 5
+MAX_GROUP_SIZE = 25
+
+SPLIT_RATIOS = (0.75, 0.15, 0.10)
+SEED = 0
+
+USE_CLAHE = False                   # ยังปิดไว้ ทดสอบทีละตัวแปร (แก้ overfit ก่อน)
+CLAHE_OUTPUT_DIR = os.path.join(WORK_DIR, "images_clahe_tmp")
+CRACK_OVERSAMPLE_RATIO = 2.0        # v7: 1.5 -> ดันต่อเพราะได้ผลจริง
+
+
+# =====================================================
+# 2. METADATA EXTRACTION
+# =====================================================
+def extract_timestamp(filename):
+    """
+    ดึง timestamp จากชื่อไฟล์ รองรับ 2 pattern:
+    1) vlcsnap_YYYY-MM-DD-HHhMMmSSs###
+    2) YYYYMMDD_HHMMSS
+    """
+    stem = Path(filename).stem
+
+    pattern_vlc = r"^vlcsnap[_-](\d{4})-(\d{2})-(\d{2})-(\d{2})h(\d{2})m(\d{2})s\d*$"
+    m = re.match(pattern_vlc, stem)
+    if m:
+        year, month, day, hour, minute, second = map(int, m.groups())
+        return datetime(year, month, day, hour, minute, second)
+
+    pattern_std = r"^(\d{8})_(\d{6})$"
+    m = re.match(pattern_std, stem)
+    if m:
+        date_part, time_part = m.groups()
+        return datetime.strptime(date_part + time_part, "%Y%m%d%H%M%S")
+
+    return None
+
+
+def extract_frame_number(filename):
+    """ดึง prefix + เลขเฟรมจาก pattern: prefix-number(-suffix)?"""
+    stem = Path(filename).stem
+    pattern = r"^([A-Za-z]+)-(\d+)(?:-[A-Za-z0-9]+)?$"
+    m = re.match(pattern, stem)
+    if m:
+        prefix, num_str = m.groups()
+        return prefix, int(num_str)
+    return None
+
+
+def is_same_group_time(ts, prev_ts, time_gap_sec=TIME_GAP_SEC):
+    return (ts - prev_ts).total_seconds() <= time_gap_sec
+
+
+def is_same_group_frame(prefix, num, prev_prefix, prev_num, frame_gap=FRAME_GAP):
+    return prefix == prev_prefix and (num - prev_num) <= frame_gap
+
+
+# =====================================================
+# 3. BUILD_GROUPS (group-aware, กัน data leakage)
+# =====================================================
+def build_groups(img_paths, time_gap_sec=TIME_GAP_SEC,
+                  frame_gap=FRAME_GAP, max_group_size=MAX_GROUP_SIZE):
+    """คืนค่า final_map -> dict {img_path: group_name}"""
+    with_time, with_frame, others = [], [], []
+
+    for p in img_paths:
+        fname = os.path.basename(p)
+        ts = extract_timestamp(fname)
+        if ts is not None:
+            with_time.append((p, ts))
+            continue
+        fr = extract_frame_number(fname)
+        if fr is not None:
+            prefix, num = fr
+            with_frame.append((p, prefix, num))
+            continue
+        others.append(p)
+
+    raw_groups = defaultdict(list)
+
+    with_time.sort(key=lambda x: x[1])
+    gid = 0
+    prev_ts = None
+    for p, ts in with_time:
+        if prev_ts is not None and not is_same_group_time(ts, prev_ts, time_gap_sec):
+            gid += 1
+        raw_groups[f"time_{gid}"].append(p)
+        prev_ts = ts
+
+    with_frame.sort(key=lambda x: (x[1], x[2]))
+    gid = 0
+    prev_prefix, prev_num = None, None
+    for p, prefix, num in with_frame:
+        if prev_prefix is not None and not is_same_group_frame(
+            prefix, num, prev_prefix, prev_num, frame_gap
+        ):
+            gid += 1
+        raw_groups[f"frame_{gid}"].append(p)
+        prev_prefix, prev_num = prefix, num
+
+    for i, p in enumerate(others):
+        raw_groups[f"single_{i}"].append(p)
+
+    final_map = {}
+    for gname, paths in raw_groups.items():
+        if len(paths) <= max_group_size:
+            for p in paths:
+                final_map[p] = gname
+        else:
+            for i in range(0, len(paths), max_group_size):
+                chunk_name = f"{gname}_chunk{i // max_group_size}"
+                for p in paths[i:i + max_group_size]:
+                    final_map[p] = chunk_name
+
+    return final_map
+
+
+# =====================================================
+# 4. STRATIFIED GROUP SPLIT
+# =====================================================
+def label_path(img_p, src_dir=SRC_DIR):
+    base = os.path.splitext(os.path.basename(img_p))[0]
+    return os.path.join(src_dir, "labels", base + ".txt")
+
+
+def count_crack_instances(img_paths, src_dir=SRC_DIR):
+    total = 0
+    for img_p in img_paths:
+        lp = label_path(img_p, src_dir)
+        if os.path.exists(lp):
+            with open(lp) as fp:
+                total += sum(1 for line in fp if line.strip().startswith(str(CRACK_CLASS_ID)))
+    return total
+
+
+def group_aware_split(final_map, ratios=SPLIT_RATIOS, seed=SEED):
+    """stratify ตามจำนวน crack instance ให้กระจายเท่ากันทุก split"""
+    random.seed(seed)
+
+    grouped = defaultdict(list)
+    for path, gname in final_map.items():
+        grouped[gname].append(path)
+
+    groups_list = list(grouped.values())
+    groups_sorted = sorted(groups_list, key=count_crack_instances, reverse=True)
+
+    train, val, test = [], [], []
+    buckets = [train, val, test]
+    counters = [0.0, 0.0, 0.0]
+
+    for g in groups_sorted:
+        total_so_far = sum(counters) + 1
+        deficit = [ratios[i] - (counters[i] / total_so_far) for i in range(3)]
+        idx = int(np.argmax(deficit))
+        buckets[idx].append(g)
+        counters[idx] += 1
+
+    def flatten(bs):
+        return [f for g in bs for f in g]
+
+    return flatten(train), flatten(val), flatten(test)
+
+
+# =====================================================
+# 5. CRACK-FOCUSED PREPROCESSING
+# =====================================================
+def apply_clahe_to_dataset(image_paths, output_dir):
+    """CLAHE เพิ่มคอนทราสต์เส้น crack — ต้องใช้กับทุก split เท่ากัน"""
+    os.makedirs(output_dir, exist_ok=True)
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    processed = []
+    for img_path in image_paths:
+        img = cv2.imread(str(img_path))
+        if img is None:
+            continue
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        l2 = clahe.apply(l)
+        enhanced = cv2.merge((l2, a, b))
+        enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
+        out_path = Path(output_dir) / Path(img_path).name
+        cv2.imwrite(str(out_path), enhanced)
+        processed.append(str(out_path))
+    return processed
+
+
+def oversample_crack_images(train_files, target_ratio=CRACK_OVERSAMPLE_RATIO, src_dir=SRC_DIR):
+    """
+    เพิ่มภาพที่มี crack ใน train set เท่านั้น
+    target_ratio 2.0 = ภาพ crack ปรากฏราว 2 เท่าของเดิม
+    รองรับ ratio > 2.0 ด้วยการทำซ้ำหลายรอบ
+    """
+    crack_files = [f for f in train_files if count_crack_instances([f], src_dir) > 0]
+    if not crack_files:
+        return train_files
+
+    n_extra = int(len(crack_files) * (target_ratio - 1.0))
+    extra = []
+    while n_extra > 0:
+        take = min(n_extra, len(crack_files))
+        extra.extend(random.sample(crack_files, take))
+        n_extra -= take
+
+    return train_files + extra
+
+
+# =====================================================
+# 6. COPY SPLIT TO WORKDIR (กันไฟล์ซ้ำถูกทับ)
+# =====================================================
+def copy_split_to_workdir(train_files, val_files, test_files,
+                           src_dir=SRC_DIR, work_dir=WORK_DIR,
+                           clear_existing=True):
+    splits = {"train": train_files, "val": val_files, "test": test_files}
+
+    for split_name in splits:
+        img_dst_dir = Path(work_dir) / "images" / split_name
+        lbl_dst_dir = Path(work_dir) / "labels" / split_name
+
+        if clear_existing and img_dst_dir.exists():
+            shutil.rmtree(img_dst_dir)
+        if clear_existing and lbl_dst_dir.exists():
+            shutil.rmtree(lbl_dst_dir)
+
+        img_dst_dir.mkdir(parents=True, exist_ok=True)
+        lbl_dst_dir.mkdir(parents=True, exist_ok=True)
+
+    # ลบ cache เก่าของ Ultralytics กันอ่านข้อมูล split รอบก่อน
+    for cache_f in Path(work_dir).glob("labels/*.cache"):
+        cache_f.unlink()
+
+    summary = {}
+    missing_labels = []
+
+    for split_name, file_list in splits.items():
+        img_dst_dir = Path(work_dir) / "images" / split_name
+        lbl_dst_dir = Path(work_dir) / "labels" / split_name
+
+        copied_img, copied_lbl, skipped = 0, 0, 0
+        name_counter = {}
+
+        for img_p in file_list:
+            img_p = Path(img_p)
+            if not img_p.exists():
+                skipped += 1
+                continue
+
+            name_counter[img_p.name] = name_counter.get(img_p.name, 0) + 1
+            occurrence = name_counter[img_p.name]
+            if occurrence == 1:
+                dst_img_name = img_p.name
+            else:
+                dst_img_name = f"{img_p.stem}_dup{occurrence}{img_p.suffix}"
+
+            shutil.copy2(img_p, img_dst_dir / dst_img_name)
+            copied_img += 1
+
+            lbl_src = Path(src_dir) / "labels" / (img_p.stem + ".txt")
+            if lbl_src.exists():
+                dst_lbl_name = Path(dst_img_name).stem + ".txt"
+                shutil.copy2(lbl_src, lbl_dst_dir / dst_lbl_name)
+                copied_lbl += 1
+            else:
+                missing_labels.append(str(img_p))
+
+        summary[split_name] = {
+            "total_requested": len(file_list),
+            "unique_files": len(name_counter),
+            "images_copied": copied_img,
+            "labels_copied": copied_lbl,
+            "images_skipped_not_found": skipped,
+        }
+
+    print("=== สรุปการคัดลอกไฟล์ตาม split ===")
+    for split_name, stats in summary.items():
+        print(f"[{split_name.upper()}] "
+              f"ขอ: {stats['total_requested']} (ไม่ซ้ำ: {stats['unique_files']}) | "
+              f"ภาพ: {stats['images_copied']} | "
+              f"label: {stats['labels_copied']} | "
+              f"หาไม่เจอ: {stats['images_skipped_not_found']}")
+
+    if missing_labels:
+        print(f"\nหมายเหตุ: {len(missing_labels)} ภาพไม่มี label (background image ปกติของ YOLO)")
+
+    return summary
+
+
+def update_data_yaml(work_dir=WORK_DIR, classes=CLASSES):
+    yaml_path = Path(work_dir) / "data.yaml"
+    abs_work = os.path.abspath(work_dir)
+    content = f"""train: {abs_work}/images/train
+val: {abs_work}/images/val
+test: {abs_work}/images/test
+nc: {len(classes)}
+names: {classes}
+"""
+    with open(yaml_path, "w") as f:
+        f.write(content)
+
+    print(f"\nอัปเดต data.yaml ที่: {yaml_path}")
+    print(content)
+    return str(yaml_path)
+
+
+# =====================================================
+# 7. TRAIN
+# =====================================================
+def train_model(data_yaml_path):
+    model = YOLO(CONFIG["model"])
+    results = model.train(
+        data=data_yaml_path,
+        epochs=CONFIG["epochs"],
+        patience=CONFIG["patience"],
+        imgsz=CONFIG["imgsz"],
+        batch=CONFIG["batch"],
+        optimizer=CONFIG["optimizer"],
+        lr0=CONFIG["lr0"],
+        lrf=CONFIG["lrf"],
+        cos_lr=CONFIG["cos_lr"],
+        momentum=CONFIG["momentum"],
+        weight_decay=CONFIG["weight_decay"],
+        dropout=CONFIG["dropout"],
+        box=CONFIG["box"],
+        cls=CONFIG["cls"],
+        dfl=CONFIG["dfl"],
+        mosaic=CONFIG["mosaic"],
+        close_mosaic=CONFIG["close_mosaic"],
+        mixup=CONFIG["mixup"],
+        copy_paste=CONFIG["copy_paste"],
+        degrees=CONFIG["degrees"],
+        translate=CONFIG["translate"],
+        scale=CONFIG["scale"],
+        fliplr=CONFIG["fliplr"],
+        hsv_h=CONFIG["hsv_h"],
+        hsv_s=CONFIG["hsv_s"],
+        hsv_v=CONFIG["hsv_v"],
+        device=CONFIG["device"],
+        workers=CONFIG["workers"],
+        seed=CONFIG["seed"],
+        deterministic=CONFIG["deterministic"],
+        amp=CONFIG["amp"],
+        name="v8",
+        verbose=True,
+    )
+    return model, results
+
+
+# =====================================================
+# 8. VALIDATE (ค่ามาตรฐานเท่านั้น)
+# =====================================================
+def evaluate_model(model, data_yaml_path, split="val"):
+    metrics = model.val(
+        data=data_yaml_path,
+        split=split,
+        conf=VAL_CONF_THRESHOLD,
+        iou=VAL_IOU_THRESHOLD,
+        imgsz=CONFIG["imgsz"],
+        verbose=True,
+    )
+    print(f"\n{split.upper()}  mAP50: {metrics.box.map50:.4f} | mAP50-95: {metrics.box.map:.4f}")
+    for i, cls_name in enumerate(CLASSES):
+        p = metrics.box.p[i] if len(metrics.box.p) > i else 0
+        r = metrics.box.r[i] if len(metrics.box.r) > i else 0
+        ap50 = metrics.box.ap50[i] if len(metrics.box.ap50) > i else 0
+        print(f"  {cls_name:10s}  P={p:.3f}  R={r:.3f}  mAP50={ap50:.3f}")
+    return metrics
+
+
+# =====================================================
+# 9. MAIN PIPELINE
+# =====================================================
+if __name__ == "__main__":
+    print("=== V8 Training Pipeline (anti-overfitting) ===")
+    print("แก้จาก v7:")
+    print("  patience 30->15 | epochs 200->120 | weight_decay 0.0005->0.001")
+    print("  dropout 0->0.08 | box 7.5->8.5 | scale 0.5->0.6 | translate 0.1->0.15")
+    print("  crack oversample 1.5->2.0 | เปิด cos_lr")
+    print(f"  CLAHE: {'เปิด (ทุก split)' if USE_CLAHE else 'ปิด'}\n")
+
+    # --- Step 1: scan ไฟล์ภาพ ---
+    img_paths = sorted(glob.glob(IMAGES_GLOB))
+    print(f"จำนวนไฟล์ภาพที่ scan เจอ: {len(img_paths)}")
+    if len(img_paths) == 0:
+        raise FileNotFoundError(f"ไม่พบไฟล์ภาพใน {IMAGES_GLOB}")
+
+    # --- Step 2: group-aware grouping ---
+    final_map = build_groups(img_paths, TIME_GAP_SEC, FRAME_GAP, MAX_GROUP_SIZE)
+    n_groups = len(set(final_map.values()))
+    print(f"จำนวนกลุ่มทั้งหมด: {n_groups}")
+
+    # --- Step 3: stratified split ---
+    train_files, val_files, test_files = group_aware_split(final_map)
+    total_imgs = len(train_files) + len(val_files) + len(test_files)
+    print(f"ก่อน oversample -> Train: {len(train_files)} ({len(train_files)/total_imgs:.1%}) | "
+          f"Val: {len(val_files)} ({len(val_files)/total_imgs:.1%}) | "
+          f"Test: {len(test_files)} ({len(test_files)/total_imgs:.1%})")
+
+    train_crack_n = count_crack_instances(train_files)
+    val_crack_n = count_crack_instances(val_files)
+    test_crack_n = count_crack_instances(test_files)
+    total_crack = max(train_crack_n + val_crack_n + test_crack_n, 1)
+    print(f"Crack instances -> Train: {train_crack_n} ({train_crack_n/total_crack:.1%}) | "
+          f"Val: {val_crack_n} ({val_crack_n/total_crack:.1%}) | "
+          f"Test: {test_crack_n} ({test_crack_n/total_crack:.1%})")
+
+    # --- Step 4: oversample crack เฉพาะ train ---
+    n_before = len(train_files)
+    train_files = oversample_crack_images(train_files)
+    print(f"หลัง oversample -> Train: {n_before} -> {len(train_files)} "
+          f"(+{len(train_files) - n_before} ภาพซ้ำโดยตั้งใจ)")
+
+    # --- Step 5: CLAHE (ถ้าเปิด ใช้ทุก split เท่ากัน) ---
+    if USE_CLAHE:
+        print("\nกำลังทำ CLAHE preprocessing (train/val/test เท่ากัน)...")
+        train_files = apply_clahe_to_dataset(train_files, os.path.join(CLAHE_OUTPUT_DIR, "train"))
+        val_files = apply_clahe_to_dataset(val_files, os.path.join(CLAHE_OUTPUT_DIR, "val"))
+        test_files = apply_clahe_to_dataset(test_files, os.path.join(CLAHE_OUTPUT_DIR, "test"))
+
+    # --- Step 6: copy ไฟล์ + อัปเดต data.yaml ---
+    copy_split_to_workdir(train_files, val_files, test_files)
+    data_yaml_path = update_data_yaml()
+
+    # --- Step 7: เทรน ---
+    model, train_results = train_model(data_yaml_path)
+
+    # --- Step 8: validate ---
+    print("\n--- Validation Set ---")
+    val_metrics = evaluate_model(model, data_yaml_path, split="val")
+
+    print("\n--- Test Set ---")
+    test_metrics = evaluate_model(model, data_yaml_path, split="test")
+
+    # --- Step 9: เทียบทุกเวอร์ชัน ---
+    print("\n=== เทียบผลลัพธ์ ===")
+    print("v6  VAL mAP50: 0.4584 | TEST mAP50: 0.4339 | TEST mAP50-95: 0.1699")
+    print("v7  VAL mAP50: 0.4343 | TEST mAP50: 0.4504 | TEST mAP50-95: 0.1784")
+    print(f"v8  VAL mAP50: {val_metrics.box.map50:.4f} | "
+          f"TEST mAP50: {test_metrics.box.map50:.4f} | "
+          f"TEST mAP50-95: {test_metrics.box.map:.4f}")
