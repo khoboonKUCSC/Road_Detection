@@ -1,9 +1,6 @@
-path: /home/ds/Desktop/Henry-20260923T032836Z-1-001/Henry/Road_Detection/dataset_clean
+path: /home/ds/Desktop/Road_Detection/dataset_clean
 train: images/train
 val: images/val
 test: images/test
 nc: 3
-names:
-- pothole
-- crack
-- manhole
+names: ['pothole', 'crack', 'manhole']

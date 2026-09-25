@@ -1,8 +1,0 @@
-names:
-- pothole
-- crack
-- manhole
-nc: 3
-path: /home/cis/road_detection/Road_Detection/data
-train: images/train
-val: images/val
