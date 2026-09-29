@@ -1,0 +1,708 @@
+"""
+================================================================
+YOLO11 Road Damage Detection — v9 PIPELINE
+================================================================
+ต่อยอดจาก v7 (test mAP50 ดีที่สุดเท่าที่เคยวัดได้ = 0.450, test-set 232 ภาพ)
+แก้ไข 5 จุดที่วิเคราะห์จากกราฟ + ภาพตัวอย่าง label ของ v5-v8:
+
+  1) MERGE_DUPLICATE_BOXES  - รวมกล่อง crack ที่วาดซ้อนทับกันเอง (คลาสเดียวกัน,
+     IoU สูง) ให้เหลือกล่องเดียว ก่อนเทรน แก้ปัญหาที่เห็นในภาพตัวอย่าง (มีกล่อง
+     "Crack" 2-3 กล่องซ้อนอยู่จุดเดียวกัน)
+
+  2) CROP_DASHBOARD         - ครอปส่วนกระโปรงหน้ารถ/แดชบอร์ด (พื้นที่สีส้มด้านล่าง
+     ภาพ) ออกจากภาพที่ถ่ายด้วย GoPro เท่านั้น (ภาพสมาร์ทโฟนไม่มีปัญหานี้) ก่อนเทรน
+     ลดพื้นที่ background ที่ไม่มีข้อมูลออกจากเฟรม
+
+  3) DEVICE-BALANCED SPLIT  - แบ่ง train/val/test แยกตามอุปกรณ์ถ่าย (GoPro / มือถือ)
+     ก่อนรวมกัน เพื่อไม่ให้กล้องใดกล้องหนึ่งกระจุกอยู่ split เดียว (มี field-of-view
+     ต่างกันมาก ถ้าแบ่งไม่สมดุลจะกระทบการวัดผล)
+
+  4) K-FOLD CROSS-VALIDATION (ทางเลือก) - ตั้ง N_FOLDS > 1 เพื่อดูค่าเฉลี่ย ± ส่วน
+     เบี่ยงเบนมาตรฐานของ mAP แทนตัวเลขจาก split เดียว (test set เดิมมีแค่ ~230 ภาพ
+     ตัวเลขสวิงได้จากความบังเอิญของการสุ่มแบ่ง)
+
+  5) AUGMENTATION           - เปิด mixup/copy_paste/degrees กลับมาแบบเบา ๆ บน config
+     ของ v7 (v7 ปิดไว้ทั้งหมด)
+
+โปรโตคอลการประเมินผล (conf=0.001, iou=0.6, ไม่ใช้ Test-Time-Augmentation) ยังคง
+เหมือนกับ v4-v8 ทุกประการ เพื่อให้ตัวเลขเทียบข้ามเวอร์ชันกันได้อย่างมีความหมาย
+
+วิธีใช้:
+  1) วางข้อมูลดิบไว้ที่ data/images/*.jpg และ data/labels/*.txt (รูปแบบ YOLO เดิม)
+  2) ปรับค่าตัวแปรในหัวข้อ "0) CONFIG" ตามต้องการ (โดยเฉพาะ N_FOLDS)
+  3) รันไฟล์นี้ทั้งไฟล์ (python v9_road_damage_pipeline.py)
+================================================================
+"""
+
+import os
+import re
+import gc
+import glob
+import random
+import shutil
+from pathlib import Path
+from datetime import datetime
+from collections import defaultdict
+
+import numpy as np
+import cv2
+import yaml
+import torch
+from ultralytics import YOLO
+
+cv2.setNumThreads(0)  # ปิด OpenCV multithreading กัน PyTorch แย่ง core กัน
+
+
+# ==================== 0) CONFIG ====================
+SEED = 0
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+
+BASE_DIR  = os.getcwd()
+SRC_DIR   = os.path.join(BASE_DIR, "data")           # ข้อมูลดิบต้นฉบับ: images/, labels/
+CLEAN_DIR = os.path.join(BASE_DIR, "data_clean_v9")  # หลังครอป + รวมกล่องซ้ำ (ก่อนแบ่ง split)
+WORK_DIR  = os.path.join(BASE_DIR, "dataset_v9")     # หลังแบ่งเป็น train/val/test
+PROJECT_NAME = "road-damage-v9"
+CLASS_NAMES  = ["pothole", "crack", "manhole"]
+CRACK_ID     = 1
+
+# ตั้งเป็น 5 (หรือมากกว่า) เพื่อรัน k-fold cross-validation แทน single split
+# หมายเหตุ: k-fold ใช้เวลาเทรนนานขึ้น k เท่า เพราะเทรนโมเดลใหม่ทุก fold
+N_FOLDS = 10
+
+# --- ตัวปรับแต่งใหม่ของ v9 ---
+DASHBOARD_CROP_RATIO = 0.15   # ครอปด้านล่างภาพ GoPro ออก 15% (ปรับตามสัดส่วนกระโปรงรถจริง)
+MIN_BOX_KEEP_FRACTION = 0.6   # กล่องที่โดนครอปเหลือพื้นที่น้อยกว่านี้ (เทียบกับของเดิม) จะถูกทิ้ง
+DUP_IOU_MERGE = 0.70          # กล่อง "คลาสเดียวกัน" ที่ IoU >= ค่านี้ ถือว่าเป็นกล่องซ้ำ -> รวมเป็นกล่องเดียว
+
+# --- ค่าที่คงไว้จาก v7/v8 (การจัดกลุ่มกันภาพซ้ำ/เฟรมติดกันไม่ให้หลุดข้าม split) ---
+TIME_GAP_SEC   = 90
+FRAME_GAP      = 5
+MAX_GROUP_SIZE = 25
+SPLIT_RATIOS   = (0.75, 0.15, 0.10)   # train / val / test
+CRACK_OVERSAMPLE_RATIO = 1.5          # เท่ากับ v7 (ผลดีที่สุดตอนนี้)
+
+# --- โปรโตคอลประเมินผล: ห้ามเปลี่ยนค่าพวกนี้ระหว่างเวอร์ชัน เพื่อให้เทียบผลกันได้ ---
+VAL_CONF_THRESHOLD = 0.001
+VAL_IOU_THRESHOLD  = 0.6
+
+
+def get_device():
+    if torch.cuda.is_available():
+        print(f"✅ พบ GPU: {torch.cuda.get_device_name(0)} -> ใช้ device='0'")
+        return 0
+    print("⚠️ ไม่พบ GPU (CUDA) -> จะใช้ CPU แทน (การเทรนจะช้ากว่ามาก)")
+    return "cpu"
+
+
+DEVICE  = get_device()
+HAS_GPU = DEVICE != "cpu"
+if HAS_GPU:
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+# config การเทรน: จุดตั้งต้นคือ v7 (test mAP50 ดีที่สุด) + เปิด mixup/copy_paste เบา ๆ (ข้อ 5)
+CONFIG = {
+    "model": "yolo11s.pt",
+    "imgsz": 1280,
+    "batch": 8,
+    "workers": 24,
+    "epochs": 200,
+    "patience": 35,          # v7=30 -> เพิ่มเล็กน้อยกันหยุดเร็วเกินไปจาก val set ที่แกว่ง
+
+    "optimizer": "AdamW",
+    "lr0": 0.0015,
+    "lrf": 0.01,
+    "momentum": 0.937,
+    "weight_decay": 0.0005,
+    "dropout": 0.0,
+    "cos_lr": False,
+
+    "box": 7.5,
+    "cls": 0.6,
+    "dfl": 1.5,
+
+    "mosaic": 1.0,
+    "close_mosaic": 15,
+    "mixup": 0.05,        # v7 = 0.0  -> เปิดเบา ๆ
+    "copy_paste": 0.15,   # v7 = 0.0  -> เปิดเบา ๆ
+    "degrees": 2.0,       # v7 = 0.0
+    "translate": 0.1,
+    "scale": 0.5,
+    "hsv_h": 0.015,
+    "hsv_s": 0.7,
+    "hsv_v": 0.4,
+}
+
+
+# ==================== 1) ตรวจอุปกรณ์ถ่ายจากชื่อไฟล์ ====================
+def extract_timestamp(filename):
+    """ดึงเวลาจากชื่อไฟล์ (รูปแบบภาพจาก GoPro/VLC screenshot)"""
+    name = Path(filename).stem
+    patterns = [
+        r"^vlcsnap[_-](\d{4})-(\d{2})-(\d{2})-(\d{2})h(\d{2})m(\d{2})s\d*$",
+        r"^(\d{8})_(\d{6})$",
+    ]
+    for pattern in patterns:
+        m = re.match(pattern, name, re.IGNORECASE)
+        if m:
+            if len(m.groups()) == 7:
+                y, mo, d, h, mi, s, _ = m.groups()
+                return datetime(int(y), int(mo), int(d), int(h), int(mi), int(s))
+            return datetime.strptime("".join(m.groups()), "%Y%m%d%H%M%S")
+    return None
+
+
+def extract_frame_number(filename):
+    """ดึง prefix + เลขเฟรม เช่น vlcsnap-00001"""
+    name = Path(filename).stem
+    m = re.match(r"^([A-Za-z]+)-(\d+)(?:-[A-Za-z0-9]+)?$", name)
+    if m:
+        return m.group(1), int(m.group(2))
+    return None, None
+
+
+def get_device_type(filename):
+    """
+    แยกว่าไฟล์นี้มาจาก GoPro (แดชบอร์ดติดในเฟรม) หรือสมาร์ทโฟน (ถ่ายใกล้ ไม่มีแดชบอร์ด)
+    - GoPro: ชื่อไฟล์ขึ้นต้นด้วย 'vlcsnap' (แคปจากวิดีโอ)
+    - สมาร์ทโฟน: ชื่อไฟล์รูปแบบ YYYYMMDD_HHMMSS
+    ถ้าจับรูปแบบไม่ได้ ให้ถือเป็น 'phone' (ปลอดภัยกว่า เพราะจะไม่ถูกครอปโดยไม่ตั้งใจ)
+    """
+    name = Path(filename).stem
+    if name.lower().startswith("vlcsnap"):
+        return "gopro"
+    if re.match(r"^\d{8}_\d{6}$", name):
+        return "phone"
+    return "phone"
+
+
+# ==================== 2) PREPROCESS: ครอปแดชบอร์ด + รวมกล่องซ้ำ ====================
+def read_yolo_labels(label_path):
+    """อ่านไฟล์ label .txt คืนค่าเป็น list ของ (cls:int, xc, yc, w, h) แบบ normalized 0-1"""
+    labels = []
+    if not os.path.exists(label_path):
+        return labels
+    with open(label_path, "r") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) != 5:
+                continue
+            cls = int(parts[0])
+            xc, yc, w, h = map(float, parts[1:])
+            labels.append((cls, xc, yc, w, h))
+    return labels
+
+
+def write_yolo_labels(label_path, labels):
+    with open(label_path, "w") as f:
+        for cls, xc, yc, w, h in labels:
+            f.write(f"{cls} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}\n")
+
+
+def crop_dashboard_labels(labels, crop_ratio, min_keep_fraction=MIN_BOX_KEEP_FRACTION):
+    """
+    ปรับพิกัดกล่องหลังครอปด้านล่างภาพออก crop_ratio ของความสูงเดิม
+    (ครอปจากขอบล่างเท่านั้น จุดกำเนิดพิกัด y=0 ที่ขอบบนไม่เปลี่ยน)
+    """
+    keep_frac = 1.0 - crop_ratio
+    out = []
+    for cls, xc, yc, w, h in labels:
+        y_top = yc - h / 2
+        y_bot = yc + h / 2
+        new_top = max(0.0, y_top)
+        new_bot = min(keep_frac, y_bot)
+        remaining = new_bot - new_top
+        if remaining <= 1e-4:
+            continue  # กล่องอยู่ในโซนที่ถูกครอปทิ้งทั้งหมด (แดชบอร์ด)
+        if remaining < min_keep_fraction * h:
+            continue  # กล่องถูกครอปจนเหลือไม่สมบูรณ์พอ -> ทิ้งกันป้ายผิด
+        new_yc = (new_top + new_bot) / 2 / keep_frac
+        new_h = remaining / keep_frac
+        out.append((cls, xc, new_yc, w, new_h))
+    return out
+
+
+def crop_dashboard_image(img, crop_ratio):
+    h = img.shape[0]
+    new_h = max(1, int(h * (1.0 - crop_ratio)))
+    return img[:new_h, :, :]
+
+
+def iou_xywh(a, b):
+    """IoU ของสองกล่อง (xc, yc, w, h) แบบ normalized"""
+    ax1, ay1 = a[0] - a[2] / 2, a[1] - a[3] / 2
+    ax2, ay2 = a[0] + a[2] / 2, a[1] + a[3] / 2
+    bx1, by1 = b[0] - b[2] / 2, b[1] - b[3] / 2
+    bx2, by2 = b[0] + b[2] / 2, b[1] + b[3] / 2
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+    inter = iw * ih
+    union = a[2] * a[3] + b[2] * b[3] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def merge_duplicate_boxes(labels, iou_thresh=DUP_IOU_MERGE):
+    """
+    รวมกล่อง 'คลาสเดียวกัน' ที่ซ้อนทับกันมาก (IoU >= iou_thresh) ให้เหลือกล่องเดียว
+    (union ของทุกกล่องในกลุ่มที่ซ้อนกัน) แก้ปัญหากล่อง crack ซ้ำที่เห็นในภาพตัวอย่าง
+    """
+    by_cls = defaultdict(list)
+    for cls, xc, yc, w, h in labels:
+        by_cls[cls].append((xc, yc, w, h))
+
+    merged = []
+    for cls, boxes in by_cls.items():
+        used = [False] * len(boxes)
+        for i in range(len(boxes)):
+            if used[i]:
+                continue
+            cluster = [boxes[i]]
+            used[i] = True
+            for j in range(i + 1, len(boxes)):
+                if used[j]:
+                    continue
+                if iou_xywh(boxes[i], boxes[j]) >= iou_thresh:
+                    cluster.append(boxes[j])
+                    used[j] = True
+            xs1 = [b[0] - b[2] / 2 for b in cluster]
+            xs2 = [b[0] + b[2] / 2 for b in cluster]
+            ys1 = [b[1] - b[3] / 2 for b in cluster]
+            ys2 = [b[1] + b[3] / 2 for b in cluster]
+            x1, x2, y1, y2 = min(xs1), max(xs2), min(ys1), max(ys2)
+            merged.append((cls, (x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1))
+    return merged
+
+
+def preprocess_dataset(src_dir, clean_dir, crop_ratio=DASHBOARD_CROP_RATIO):
+    """
+    วนทุกภาพใน src_dir:
+      - ถ้าเป็น GoPro -> ครอปแดชบอร์างออก + ปรับ label ตาม
+      - รวมกล่องซ้ำ (ทุกภาพ ไม่ว่าอุปกรณ์ไหน)
+      - เซฟผลลัพธ์ไปที่ clean_dir/images, clean_dir/labels
+    คืนค่า dict {image_path(ใน clean_dir): device_type}
+    """
+    img_dst_dir = Path(clean_dir) / "images"
+    lbl_dst_dir = Path(clean_dir) / "labels"
+    if Path(clean_dir).exists():
+        shutil.rmtree(clean_dir)
+    img_dst_dir.mkdir(parents=True, exist_ok=True)
+    lbl_dst_dir.mkdir(parents=True, exist_ok=True)
+
+    # ตรวจสอบชื่อโฟลเดอร์ labels ต้นฉบับ (รองรับทั้ง labels และ labels-YOLO)
+    src_label_dir = os.path.join(src_dir, "labels-YOLO") if os.path.exists(os.path.join(src_dir, "labels-YOLO")) else os.path.join(src_dir, "labels")
+
+    img_paths = sorted(glob.glob(os.path.join(src_dir, "images", "*.*")))
+    device_map = {}
+    n_gopro_cropped, n_boxes_dropped, n_boxes_merged = 0, 0, 0
+
+    for img_p in img_paths:
+        fname = os.path.basename(img_p)
+        stem = Path(fname).stem
+        label_p = os.path.join(src_label_dir, stem + ".txt")
+        labels = read_yolo_labels(label_p)
+        device = get_device_type(fname)
+
+        img = cv2.imread(img_p)
+        if img is None:
+            continue
+
+        if device == "gopro":
+            before = len(labels)
+            labels = crop_dashboard_labels(labels, crop_ratio)
+            n_boxes_dropped += before - len(labels)
+            img = crop_dashboard_image(img, crop_ratio)
+            n_gopro_cropped += 1
+
+        before_merge = len(labels)
+        labels = merge_duplicate_boxes(labels, DUP_IOU_MERGE)
+        n_boxes_merged += before_merge - len(labels)
+
+        out_img_path = img_dst_dir / fname
+        cv2.imwrite(str(out_img_path), img)
+        write_yolo_labels(lbl_dst_dir / f"{stem}.txt", labels)
+        device_map[str(out_img_path)] = device
+
+    print("\n=== สรุป Preprocessing (v9) ===")
+    print(f"ภาพทั้งหมด: {len(img_paths)}")
+    print(f"ภาพ GoPro ที่ถูกครอปแดชบอร์ด: {n_gopro_cropped}")
+    print(f"กล่องที่ถูกทิ้งเพราะอยู่ในโซนแดชบอร์ด/ครอปจนไม่สมบูรณ์: {n_boxes_dropped}")
+    print(f"กล่องที่ถูกรวมเพราะซ้อนทับกันเอง (duplicate): {n_boxes_merged}")
+    n_phone = sum(1 for v in device_map.values() if v == "phone")
+    n_gopro = sum(1 for v in device_map.values() if v == "gopro")
+    print(f"สัดส่วนอุปกรณ์: GoPro={n_gopro} | สมาร์ทโฟน={n_phone}")
+    return device_map
+
+
+# ==================== 3) GROUPING (กันภาพซ้ำ/เฟรมติดกันหลุดข้าม split) ====================
+def build_groups(img_paths, time_gap_sec=TIME_GAP_SEC, frame_gap=FRAME_GAP,
+                  max_group_size=MAX_GROUP_SIZE):
+    with_time, with_frame, others = [], [], []
+    for p in img_paths:
+        fname = os.path.basename(p)
+        ts = extract_timestamp(fname)
+        if ts is not None:
+            with_time.append((ts, p))
+            continue
+        prefix, num = extract_frame_number(fname)
+        if prefix is not None:
+            with_frame.append((prefix, num, p))
+            continue
+        others.append(p)
+
+    raw_groups = defaultdict(list)
+    gid = 0
+
+    with_time.sort(key=lambda x: x[0])
+    prev_ts = None
+    for ts, p in with_time:
+        if prev_ts is None or (ts - prev_ts).total_seconds() > time_gap_sec:
+            gid += 1
+        raw_groups[f"time_g{gid}"].append(p)
+        prev_ts = ts
+
+    with_frame.sort(key=lambda x: (x[0], x[1]))
+    prev_prefix, prev_num = None, None
+    for prefix, num, p in with_frame:
+        if prefix != prev_prefix or (num - prev_num) > frame_gap:
+            gid += 1
+        raw_groups[f"frame_g{gid}"].append(p)
+        prev_prefix, prev_num = prefix, num
+
+    for p in others:
+        gid += 1
+        raw_groups[f"other_g{gid}"].append(p)
+
+    final_groups = {}
+    for key, files in raw_groups.items():
+        if len(files) <= max_group_size:
+            final_groups[key] = files
+        else:
+            for i in range(0, len(files), max_group_size):
+                final_groups[f"{key}_c{i // max_group_size}"] = files[i:i + max_group_size]
+    return final_groups
+
+
+def count_crack_instances(img_paths, label_dir):
+    total = 0
+    for img_p in img_paths:
+        lp = os.path.join(label_dir, Path(img_p).stem + ".txt")
+        if os.path.exists(lp):
+            with open(lp) as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if parts and int(parts[0]) == CRACK_ID:
+                        total += 1
+    return total
+
+
+# ==================== 4) SPLIT: stratify ตาม crack + สมดุลอุปกรณ์ ====================
+def stratified_split_groups(group_keys_subset, groups, label_dir, ratios=SPLIT_RATIOS, seed=SEED):
+    """แบ่งกลุ่มภาพตามสัดส่วน ratios โดยถ่วงน้ำหนักให้จำนวน crack instance กระจายสม่ำเสมอ"""
+    rnd = random.Random(seed)
+    keys = list(group_keys_subset)
+    rnd.shuffle(keys)
+    keys_sorted = sorted(keys, key=lambda g: -count_crack_instances(groups[g], label_dir))
+
+    buckets = [[], [], []]
+    counters = [0.0, 0.0, 0.0]
+    for g in keys_sorted:
+        total_so_far = sum(counters) + 1
+        deficit = [ratios[i] - (counters[i] / total_so_far) for i in range(3)]
+        idx = int(np.argmax(deficit))
+        buckets[idx].append(g)
+        counters[idx] += 1
+    return buckets  # [train_keys, val_keys, test_keys]
+
+
+def device_balanced_split(groups, device_map, label_dir, ratios=SPLIT_RATIOS):
+    """
+    แบ่ง split แยกทีละอุปกรณ์ก่อน (gopro, phone) แล้วค่อยรวมผลลัพธ์
+    เพื่อการันตีว่าแต่ละ split มีสัดส่วนอุปกรณ์ใกล้เคียงกับข้อมูลทั้งหมด
+    """
+    groups_by_device = defaultdict(list)
+    for gkey, paths in groups.items():
+        # ใช้อุปกรณ์ของภาพแรกในกลุ่มเป็นตัวแทน (ปกติทั้งกลุ่มมาจากอุปกรณ์เดียวกัน)
+        rep_device = device_map.get(paths[0], "phone")
+        groups_by_device[rep_device].append(gkey)
+
+    train_keys, val_keys, test_keys = [], [], []
+    for dev, keys_subset in groups_by_device.items():
+        tr, va, te = stratified_split_groups(keys_subset, groups, label_dir, ratios)
+        train_keys += tr
+        val_keys += va
+        test_keys += te
+        print(f"  [{dev}] groups -> train={len(tr)} val={len(va)} test={len(te)}")
+
+    return train_keys, val_keys, test_keys
+
+
+# ==================== 5) OVERSAMPLE + COPY TO WORKDIR ====================
+def oversample_crack_images(train_files, label_dir, target_ratio=CRACK_OVERSAMPLE_RATIO):
+    crack_files = [f for f in train_files if count_crack_instances([f], label_dir) > 0]
+    if not crack_files:
+        return train_files
+    n_extra = int(len(crack_files) * (target_ratio - 1.0))
+    extra = []
+    rnd = random.Random(SEED)
+    while n_extra > 0:
+        take = min(n_extra, len(crack_files))
+        extra.extend(rnd.sample(crack_files, take))
+        n_extra -= take
+    return train_files + extra
+
+
+def copy_split_to_workdir(train_files, val_files, test_files, clean_dir, work_dir):
+    splits = {"train": train_files, "val": val_files, "test": test_files}
+    if Path(work_dir).exists():
+        shutil.rmtree(work_dir)
+
+    for split_name, file_list in splits.items():
+        img_dst = Path(work_dir) / "images" / split_name
+        lbl_dst = Path(work_dir) / "labels" / split_name
+        img_dst.mkdir(parents=True, exist_ok=True)
+        lbl_dst.mkdir(parents=True, exist_ok=True)
+
+        name_counter = {}
+        copied, missing = 0, 0
+        for img_p in file_list:
+            img_p = Path(img_p)
+            if not img_p.exists():
+                missing += 1
+                continue
+            name_counter[img_p.name] = name_counter.get(img_p.name, 0) + 1
+            occ = name_counter[img_p.name]
+            dst_name = img_p.name if occ == 1 else f"{img_p.stem}_dup{occ}{img_p.suffix}"
+            shutil.copy2(img_p, img_dst / dst_name)
+
+            lbl_src = Path(clean_dir) / "labels" / f"{img_p.stem}.txt"
+            if lbl_src.exists():
+                shutil.copy2(lbl_src, lbl_dst / f"{Path(dst_name).stem}.txt")
+            copied += 1
+        print(f"  [{split_name}] copied={copied} missing={missing} (unique files={len(name_counter)})")
+
+
+def update_data_yaml(work_dir, classes=CLASS_NAMES):
+    yaml_path = Path(work_dir) / "data.yaml"
+    abs_work = os.path.abspath(work_dir)
+    content = {
+        "path": abs_work,
+        "train": "images/train",
+        "val": "images/val",
+        "test": "images/test",
+        "nc": len(classes),
+        "names": classes,
+    }
+    with open(yaml_path, "w") as f:
+        yaml.dump(content, f, sort_keys=False)
+    print(f"✅ สร้าง {yaml_path}")
+    return str(yaml_path)
+
+
+# ==================== 6) TRAIN / EVALUATE ====================
+def train_model(data_yaml_path, run_name):
+    model = YOLO(CONFIG["model"])
+    results = model.train(
+        data=data_yaml_path,
+        project=PROJECT_NAME,
+        name=run_name,
+        exist_ok=True,
+        epochs=CONFIG["epochs"],
+        patience=CONFIG["patience"],
+        imgsz=CONFIG["imgsz"],
+        batch=CONFIG["batch"],
+        device=DEVICE,
+        amp=HAS_GPU,
+        workers=CONFIG["workers"],
+        seed=SEED,
+        deterministic=True,
+        cache=False,
+        optimizer=CONFIG["optimizer"],
+        lr0=CONFIG["lr0"],
+        lrf=CONFIG["lrf"],
+        momentum=CONFIG["momentum"],
+        weight_decay=CONFIG["weight_decay"],
+        dropout=CONFIG["dropout"],
+        cos_lr=CONFIG["cos_lr"],
+        box=CONFIG["box"],
+        cls=CONFIG["cls"],
+        dfl=CONFIG["dfl"],
+        mosaic=CONFIG["mosaic"],
+        close_mosaic=CONFIG["close_mosaic"],
+        mixup=CONFIG["mixup"],
+        copy_paste=CONFIG["copy_paste"],
+        degrees=CONFIG["degrees"],
+        translate=CONFIG["translate"],
+        scale=CONFIG["scale"],
+        hsv_h=CONFIG["hsv_h"],
+        hsv_s=CONFIG["hsv_s"],
+        hsv_v=CONFIG["hsv_v"],
+        verbose=True,
+    )
+    return model, results
+
+
+def evaluate_model(model, data_yaml_path, split):
+    """โปรโตคอลคงที่: conf=0.001, iou=0.6, ไม่ใช้ TTA -> เทียบข้ามเวอร์ชันได้"""
+    metrics = model.val(
+        data=data_yaml_path,
+        split=split,
+        conf=VAL_CONF_THRESHOLD,
+        iou=VAL_IOU_THRESHOLD,
+        imgsz=CONFIG["imgsz"],
+        verbose=True,
+    )
+    print(f"\n{split.upper()}  mAP50: {metrics.box.map50:.4f} | mAP50-95: {metrics.box.map:.4f}"
+          f" | P: {metrics.box.mp:.4f} | R: {metrics.box.mr:.4f}")
+    for i, name in enumerate(CLASS_NAMES):
+        p = metrics.box.p[i] if len(metrics.box.p) > i else 0
+        r = metrics.box.r[i] if len(metrics.box.r) > i else 0
+        ap50 = metrics.box.ap50[i] if len(metrics.box.ap50) > i else 0
+        print(f"  {name:10s}  P={p:.3f}  R={r:.3f}  AP50={ap50:.3f}")
+    return metrics
+
+
+# ==================== 7) MAIN: single split หรือ k-fold ====================
+def run_single_split(groups, device_map, clean_dir, work_dir, run_name):
+    print("\n=== แบ่ง train/val/test (stratify ตาม crack + สมดุลอุปกรณ์) ===")
+    label_dir = os.path.join(clean_dir, "labels")
+    train_keys, val_keys, test_keys = device_balanced_split(groups, device_map, label_dir)
+
+    train_files = [p for k in train_keys for p in groups[k]]
+    val_files = [p for k in val_keys for p in groups[k]]
+    test_files = [p for k in test_keys for p in groups[k]]
+    print(f"จำนวนภาพก่อน oversample -> train={len(train_files)} val={len(val_files)} test={len(test_files)}")
+
+    n_before = len(train_files)
+    train_files = oversample_crack_images(train_files, label_dir)
+    print(f"หลัง oversample crack -> train={n_before} -> {len(train_files)}")
+
+    print("\n=== คัดลอกไฟล์ไป workdir ===")
+    copy_split_to_workdir(train_files, val_files, test_files, clean_dir, work_dir)
+    data_yaml_path = update_data_yaml(work_dir)
+
+    print("\n=== เริ่มเทรน (v9) ===")
+    model, _ = train_model(data_yaml_path, run_name)
+    torch.cuda.empty_cache()
+    gc.collect()
+
+    best_pt = os.path.join(results.save_dir, "weights", "best.pt")
+    best = YOLO(best_pt)
+
+    print("\n--- ผลบน VAL SET ---")
+    val_metrics = evaluate_model(best, data_yaml_path, "val")
+    print("\n--- ผลบน TEST SET (ตัวเลขที่ใช้เทียบกับ v4-v8) ---")
+    test_metrics = evaluate_model(best, data_yaml_path, "test")
+
+    best.export(format="onnx")
+    print(f"\n✅ Export ONNX สำเร็จ: {os.path.dirname(best_pt)}")
+
+    return {
+        "val_map50": float(val_metrics.box.map50), "val_map": float(val_metrics.box.map),
+        "test_map50": float(test_metrics.box.map50), "test_map": float(test_metrics.box.map),
+        "test_p": float(test_metrics.box.mp), "test_r": float(test_metrics.box.mr),
+    }
+
+
+def make_kfold_buckets(group_keys, groups, label_dir, k):
+    """แบ่งกลุ่มภาพเป็น k ถัง โดยถ่วงให้จำนวน crack instance ในแต่ละถังใกล้เคียงกัน"""
+    keys_sorted = sorted(group_keys, key=lambda g: -count_crack_instances(groups[g], label_dir))
+    buckets = [[] for _ in range(k)]
+    bucket_crack_totals = [0] * k
+    for gkey in keys_sorted:
+        idx = int(np.argmin(bucket_crack_totals))
+        buckets[idx].append(gkey)
+        bucket_crack_totals[idx] += count_crack_instances(groups[gkey], label_dir)
+    return buckets
+
+
+def run_kfold(groups, device_map, clean_dir, k=N_FOLDS):
+    """
+    K-Fold cross-validation: ทำแยกทีละอุปกรณ์ (gopro/phone) แล้วรวม bucket กัน
+    เพื่อคง property เดียวกับ device_balanced_split
+    """
+    label_dir = os.path.join(clean_dir, "labels")
+    groups_by_device = defaultdict(list)
+    for gkey, paths in groups.items():
+        rep_device = device_map.get(paths[0], "phone")
+        groups_by_device[rep_device].append(gkey)
+
+    combined_buckets = [[] for _ in range(k)]
+    for dev, keys_subset in groups_by_device.items():
+        buckets = make_kfold_buckets(keys_subset, groups, label_dir, k)
+        for i in range(k):
+            combined_buckets[i] += buckets[i]
+
+    fold_results = []
+    for i in range(k):
+        print(f"\n{'#' * 60}\n#  FOLD {i + 1}/{k}\n{'#' * 60}")
+        test_keys = combined_buckets[i]
+        val_keys = combined_buckets[(i + 1) % k]
+        train_keys = [g for j, b in enumerate(combined_buckets) if j not in (i, (i + 1) % k) for g in b]
+
+        train_files = [p for kk in train_keys for p in groups[kk]]
+        val_files = [p for kk in val_keys for p in groups[kk]]
+        test_files = [p for kk in test_keys for p in groups[kk]]
+        train_files = oversample_crack_images(train_files, label_dir)
+
+        fold_work_dir = f"{WORK_DIR}_fold{i}"
+        copy_split_to_workdir(train_files, val_files, test_files, clean_dir, fold_work_dir)
+        data_yaml_path = update_data_yaml(fold_work_dir)
+
+        run_name = f"fold{i}"
+        model, results = train_model(data_yaml_path, run_name)
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        best_pt = os.path.join(results.save_dir, "weights", "best.pt")
+        best = YOLO(best_pt)
+        test_metrics = evaluate_model(best, data_yaml_path, "test")
+        fold_results.append([
+            float(test_metrics.box.map50), float(test_metrics.box.map),
+            float(test_metrics.box.mp), float(test_metrics.box.mr),
+        ])
+        del model, best
+        gc.collect()
+
+    arr = np.array(fold_results)
+    print(f"\n{'=' * 60}")
+    print(f"  K-FOLD SUMMARY (k={k})")
+    print(f"  test mAP50    = {arr[:, 0].mean():.4f} ± {arr[:, 0].std():.4f}")
+    print(f"  test mAP50-95 = {arr[:, 1].mean():.4f} ± {arr[:, 1].std():.4f}")
+    print(f"  test Precision= {arr[:, 2].mean():.4f} ± {arr[:, 2].std():.4f}")
+    print(f"  test Recall   = {arr[:, 3].mean():.4f} ± {arr[:, 3].std():.4f}")
+    print(f"{'=' * 60}")
+    return fold_results
+
+
+if __name__ == "__main__":
+    print("=== V9 Training Pipeline ===")
+    print("ต่อยอดจาก v7 + แก้: dedup กล่อง crack, ครอปแดชบอร์ด GoPro, split สมดุลอุปกรณ์,")
+    print(f"เปิด mixup/copy_paste เบา ๆ, N_FOLDS={N_FOLDS}\n")
+
+    # --- ขั้นที่ 1: preprocess (ครอปแดชบอร์าง + รวมกล่องซ้ำ) ---
+    device_map = preprocess_dataset(SRC_DIR, CLEAN_DIR, DASHBOARD_CROP_RATIO)
+
+    # --- ขั้นที่ 2: จัดกลุ่มภาพกันรั่วไหลระหว่าง split ---
+    clean_img_paths = sorted(glob.glob(os.path.join(CLEAN_DIR, "images", "*.*")))
+    groups = build_groups(clean_img_paths)
+    print(f"\nจำนวนกลุ่มภาพทั้งหมด (หลัง grouping กันรั่ว): {len(groups)}")
+
+    # --- ขั้นที่ 3: เทรน (single split หรือ k-fold ตาม N_FOLDS) ---
+    if N_FOLDS <= 1:
+        result = run_single_split(groups, device_map, CLEAN_DIR, WORK_DIR, run_name="v9")
+
+        print("\n=== เทียบกับเวอร์ชันก่อนหน้า (test set, conf=0.001, iou=0.6, no TTA) ===")
+        print("v4  TEST mAP50: 0.376 | mAP50-95: 0.149")
+        print("v5  TEST mAP50: 0.432 | mAP50-95: 0.174")
+        print("v6  TEST mAP50: 0.434 | mAP50-95: 0.170")
+        print("v7  TEST mAP50: 0.450 | mAP50-95: 0.178")
+        print("v8  TEST mAP50: 0.446 | mAP50-95: 0.171")
+        print(f"v9  TEST mAP50: {result['test_map50']:.4f} | mAP50-95: {result['test_map']:.4f}"
+              f" | P: {result['test_p']:.4f} | R: {result['test_r']:.4f}")
+    else:
+        run_kfold(groups, device_map, CLEAN_DIR, k=N_FOLDS)
+
+    print("\n🏁 v9 เสร็จสมบูรณ์")
