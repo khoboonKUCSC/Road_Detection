@@ -1,0 +1,82 @@
+# Paths are resolved relative to research_v1/, not the current shell directory.
+data_root: ../data
+manifest: artifacts/dataset/manifest.json
+output_root: runs/paper_study
+device: cuda
+seeds: [0, 42, 2026]
+experiments:
+  - name: fasterrcnn_baseline
+    architecture: fasterrcnn_r50_fpn_v2
+    geometry_mode: none
+  - name: fasterrcnn_aspect
+    architecture: fasterrcnn_r50_fpn_v2
+    geometry_mode: aspect
+  - name: fasterrcnn_geometry
+    architecture: fasterrcnn_r50_fpn_v2
+    geometry_mode: full
+  - name: fasterrcnn_detail
+    architecture: fasterrcnn_r50_fpn_v2
+    geometry_mode: none
+    training_overrides:
+      crack_crop_probability: 0.5
+  - name: fasterrcnn_detail_geometry
+    architecture: fasterrcnn_r50_fpn_v2
+    geometry_mode: full
+    training_overrides:
+      crack_crop_probability: 0.5
+  - name: fcos_baseline
+    architecture: fcos_r50_fpn
+    geometry_mode: none
+  - name: yolo11s_baseline
+    architecture: yolo11s
+    geometry_mode: none
+    input_size: 640
+    weights_id: yolo11s.pt
+    training_overrides:
+      lr: 0.001
+  - name: rtdetr_v2_baseline
+    architecture: rtdetr_v2_r50vd
+    geometry_mode: none
+    input_size: 640
+    weights_id: PekingU/rtdetr_v2_r50vd
+model:
+  pretrained: true
+  min_size: 640
+  max_size: 1138
+  score_floor: 0.001
+  geometry_weight: 0.2
+  crack_only: true
+  trainable_backbone_layers: 3
+training:
+  epochs: 80
+  patience: 15
+  batch_size: 4
+  workers: 4
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  grad_clip: 10.0
+  deterministic: true
+  cpu_threads: 4
+  val_every: 1
+  save_every: 20
+  limit_train: null
+  limit_eval: null
+  crack_crop_probability: 0.0
+  crack_crop_size: 256
+evaluation:
+  batch_size: 1
+  visualizations: 30
+  tiling: false
+  tile_size: 384
+  tile_overlap: 0.25
+  tile_nms: 0.5
+  include_full_image: true
+  warmup_images: 3
+study:
+  require_registration: true
+  bootstrap_repeats: 1000
+  comparisons:
+    - [fasterrcnn_baseline, fasterrcnn_detail]
+    - [fasterrcnn_baseline, fasterrcnn_geometry]
+    - [fasterrcnn_detail, fasterrcnn_detail_geometry]

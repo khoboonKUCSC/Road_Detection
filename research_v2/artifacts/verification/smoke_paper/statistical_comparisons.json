@@ -1,0 +1,10 @@
+[
+  {
+    "baseline": "smoke_baseline",
+    "method": "smoke_geometry",
+    "seed": 0,
+    "split": "test",
+    "status": "not_estimable",
+    "reason": "Need at least 2 test groups for a group bootstrap interval"
+  }
+]

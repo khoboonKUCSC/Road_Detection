@@ -1,0 +1,1835 @@
+{
+  "source": "https://zenodo.org/records/17834373",
+  "source_files": 2009,
+  "unique_images": 1999,
+  "duplicate_images_removed": [],
+  "errors": [],
+  "annotation_adjustments": [
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250216_164541.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.382812,
+        0.755556,
+        0.48125,
+        0.755556,
+        0.48125,
+        1.002778,
+        0.382812,
+        1.002778
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250219_164754.txt",
+      "line": 3,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.003125,
+        0.316667,
+        0.570312,
+        0.316667,
+        0.570312,
+        0.647222,
+        -0.003125,
+        0.647222
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250219_164813.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.003125,
+        0.483333,
+        0.578125,
+        0.483333,
+        0.578125,
+        0.988889,
+        -0.003125,
+        0.988889
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250219_164848.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.745313,
+        0.605556,
+        1.001562,
+        0.605556,
+        1.001562,
+        0.833333,
+        0.745313,
+        0.833333
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250219_170258.txt",
+      "line": 7,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.571875,
+        0.388889,
+        0.8375,
+        0.388889,
+        0.8375,
+        1.002778,
+        0.571875,
+        1.002778
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_143908.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.495312,
+        0.652778,
+        0.845313,
+        0.652778,
+        0.845313,
+        1.002778,
+        0.495312,
+        1.002778
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_143908.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.321875,
+        0.411111,
+        0.848437,
+        0.411111,
+        0.848437,
+        1.005556,
+        0.321875,
+        1.005556
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_143917.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.26875,
+        0.452778,
+        0.628125,
+        0.452778,
+        0.628125,
+        1.002778,
+        0.26875,
+        1.002778
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_144145.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.405556,
+        0.609375,
+        0.405556,
+        0.609375,
+        0.994444,
+        -0.001563,
+        0.994444
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_144154.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.003125,
+        0.172222,
+        0.453125,
+        0.172222,
+        0.453125,
+        0.655556,
+        -0.003125,
+        0.655556
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_144304.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.323437,
+        0.411111,
+        0.860938,
+        0.411111,
+        0.860938,
+        1.002778,
+        0.323437,
+        1.002778
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_144310.txt",
+      "line": 4,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        0.0,
+        0.664062,
+        0.775,
+        0.860938,
+        0.775,
+        0.860938,
+        1.002778,
+        0.664062,
+        1.002778
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_144352.txt",
+      "line": 4,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.363889,
+        0.84375,
+        0.363889,
+        0.84375,
+        0.997222,
+        -0.001563,
+        0.997222
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_144821.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.304688,
+        0.197222,
+        0.53125,
+        0.197222,
+        0.53125,
+        1.002778,
+        0.304688,
+        1.002778
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_144906.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.003125,
+        0.252778,
+        0.8125,
+        0.252778,
+        0.8125,
+        1.008333,
+        -0.003125,
+        1.008333
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_144911.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.0,
+        0.216667,
+        1.0,
+        0.216667,
+        1.0,
+        1.002778,
+        0.0,
+        1.002778
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/20250223_144948.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.136111,
+        0.670312,
+        0.136111,
+        0.670312,
+        0.997222,
+        -0.001563,
+        0.997222
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-00058.txt",
+      "line": 2,
+      "action": "retain_AABB_disable_geometry_invalid_quad"
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-00058.txt",
+      "line": 2,
+      "action": "drop_degenerate_annotation",
+      "original_values": [
+        1.0,
+        0.6375,
+        0.786111,
+        0.640625,
+        0.786111,
+        0.640625,
+        0.786111,
+        0.6375,
+        0.786111
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-00170.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.727778,
+        0.082812,
+        0.727778,
+        0.082812,
+        0.819444,
+        -0.001563,
+        0.819444
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-00205.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.003125,
+        0.563889,
+        0.2,
+        0.563889,
+        0.2,
+        0.641667,
+        -0.003125,
+        0.641667
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-17h02m07s200.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.619444,
+        0.292187,
+        0.619444,
+        0.292187,
+        0.791667,
+        -0.001563,
+        0.791667
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-17h04m29s066.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.494444,
+        0.18125,
+        0.494444,
+        0.18125,
+        0.733333,
+        -0.001563,
+        0.733333
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-17h04m45s733.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.55,
+        0.153125,
+        0.55,
+        0.153125,
+        0.730556,
+        -0.001563,
+        0.730556
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-17h04m50s312.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.511111,
+        0.18125,
+        0.511111,
+        0.18125,
+        0.719444,
+        -0.001563,
+        0.719444
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-17h06m28s723.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.586111,
+        0.2,
+        0.586111,
+        0.2,
+        0.708333,
+        -0.001563,
+        0.708333
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-17h10m25s907.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.638889,
+        0.520312,
+        0.638889,
+        0.520312,
+        0.766667,
+        -0.001563,
+        0.766667
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-18h30m24s122.txt",
+      "line": 6,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.003125,
+        0.669444,
+        0.151562,
+        0.669444,
+        0.151562,
+        0.741667,
+        -0.003125,
+        0.741667
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-18h30m26s925.txt",
+      "line": 4,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.555556,
+        0.179688,
+        0.555556,
+        0.179688,
+        0.75,
+        -0.001563,
+        0.75
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-18h41m45s164.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        2.0,
+        0.903125,
+        0.647222,
+        1.014063,
+        0.647222,
+        1.014063,
+        0.725,
+        0.903125,
+        0.725
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-18h41m45s164.txt",
+      "line": 3,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        2.0,
+        0.85,
+        0.55,
+        1.0125,
+        0.55,
+        1.0125,
+        0.613889,
+        0.85,
+        0.613889
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-18h42m13s186.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.853125,
+        0.722222,
+        1.001562,
+        0.722222,
+        1.001562,
+        0.869444,
+        0.853125,
+        0.869444
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-18h42m14s982.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.823438,
+        0.661111,
+        1.001562,
+        0.661111,
+        1.001562,
+        0.883333,
+        0.823438,
+        0.883333
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-18h47m04s939.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.004687,
+        0.555556,
+        0.146875,
+        0.555556,
+        0.146875,
+        0.697222,
+        -0.004687,
+        0.697222
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-23h13m29s907.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        2.0,
+        -0.001563,
+        0.636111,
+        0.176563,
+        0.636111,
+        0.176563,
+        0.730556,
+        -0.001563,
+        0.730556
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-23h14m04s766.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        2.0,
+        0.88125,
+        0.672222,
+        1.003125,
+        0.672222,
+        1.003125,
+        0.805556,
+        0.88125,
+        0.805556
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-23h25m16s322.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.776563,
+        0.652778,
+        1.003125,
+        0.652778,
+        1.003125,
+        0.802778,
+        0.776563,
+        0.802778
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-18-23h26m05s423.txt",
+      "line": 3,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.757812,
+        0.572222,
+        1.015625,
+        0.572222,
+        1.015625,
+        0.733333,
+        0.757812,
+        0.733333
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-19-14h17m45s679.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        2.0,
+        -0.007812,
+        0.680556,
+        0.114062,
+        0.680556,
+        0.114062,
+        0.719444,
+        -0.007812,
+        0.719444
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-19-14h28m52s076.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.765625,
+        0.697222,
+        1.001562,
+        0.697222,
+        1.001562,
+        0.911111,
+        0.765625,
+        0.911111
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-19-14h29m25s660.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        0.0,
+        0.923438,
+        0.736111,
+        1.004687,
+        0.736111,
+        1.004687,
+        0.833333,
+        0.923438,
+        0.833333
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-26-20h34m50s947.txt",
+      "line": 3,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.675,
+        0.694444,
+        1.004687,
+        0.694444,
+        1.004687,
+        0.880556,
+        0.675,
+        0.880556
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-26-20h36m00s346.txt",
+      "line": 3,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.001563,
+        0.552778,
+        0.251563,
+        0.552778,
+        0.251563,
+        0.8,
+        -0.001563,
+        0.8
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-26-20h38m20s232.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.671875,
+        0.677778,
+        1.001562,
+        0.677778,
+        1.001562,
+        0.886111,
+        0.671875,
+        0.886111
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-26-20h40m55s588.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.001563,
+        0.677778,
+        1.001562,
+        0.677778,
+        1.001562,
+        0.911111,
+        0.001563,
+        0.911111
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-26-20h40m57s113.txt",
+      "line": 1,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        0.1125,
+        0.627778,
+        1.00625,
+        0.627778,
+        1.00625,
+        0.941667,
+        0.1125,
+        0.941667
+      ]
+    },
+    {
+      "label": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data/labels/vlcsnap-2025-02-26-20h42m15s464.txt",
+      "line": 2,
+      "action": "clip_AABB_to_image_disable_geometry",
+      "original_values": [
+        1.0,
+        -0.003125,
+        0.611111,
+        0.284375,
+        0.611111,
+        0.284375,
+        0.783333,
+        -0.003125,
+        0.783333
+      ]
+    }
+  ],
+  "conflicting_duplicate_clusters": [
+    {
+      "file_a": "vlcsnap-2025-02-18-17h03m41s574.jpg",
+      "file_b": "vlcsnap-2025-02-18-17h04m14s457.jpg",
+      "sha256_a": "03d0d10504382f37c91ad2b572c2c82e3eac552d97bfa88419420922fb2dd51f",
+      "sha256_b": "03d0d10504382f37c91ad2b572c2c82e3eac552d97bfa88419420922fb2dd51f",
+      "label_sha256_a": "b5e10017501f20e21e36a89213c081cf7290dbd28e3652ac6345d52d3849f47c",
+      "label_sha256_b": "9c7a7e658aaca77e37b22ce8e1bcf4a358d3800885340b59fa05f88474bcbf82",
+      "annotations_a": [
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            1.0003199999999999,
+            204.00012,
+            112.0,
+            264.99996
+          ],
+          "quadrilateral": [
+            [
+              1.0003199999999999,
+              204.00012
+            ],
+            [
+              112.0,
+              204.00012
+            ],
+            [
+              112.0,
+              264.99996
+            ],
+            [
+              1.0003199999999999,
+              264.99996
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            70.99968,
+            190.00008,
+            118.0,
+            219.99996
+          ],
+          "quadrilateral": [
+            [
+              70.99968,
+              190.00008
+            ],
+            [
+              118.0,
+              190.00008
+            ],
+            [
+              118.0,
+              219.99996
+            ],
+            [
+              70.99968,
+              219.99996
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            110.0,
+            167.00004,
+            153.00032,
+            192.99996
+          ],
+          "quadrilateral": [
+            [
+              110.0,
+              167.00004
+            ],
+            [
+              153.00032,
+              167.00004
+            ],
+            [
+              153.00032,
+              192.99996
+            ],
+            [
+              110.0,
+              192.99996
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            120.0,
+            218.00016,
+            337.00032,
+            236.00016000000002
+          ],
+          "quadrilateral": [
+            [
+              120.0,
+              218.00016
+            ],
+            [
+              337.00032,
+              218.00016
+            ],
+            [
+              337.00032,
+              236.00016000000002
+            ],
+            [
+              120.0,
+              236.00016000000002
+            ]
+          ]
+        },
+        {
+          "category_id": 1,
+          "bbox_xyxy": [
+            298.0,
+            176.00004,
+            330.0,
+            195.99984
+          ],
+          "quadrilateral": [
+            [
+              298.0,
+              176.00004
+            ],
+            [
+              330.0,
+              176.00004
+            ],
+            [
+              330.0,
+              195.99984
+            ],
+            [
+              298.0,
+              195.99984
+            ]
+          ]
+        }
+      ],
+      "annotations_b": [
+        {
+          "category_id": 1,
+          "bbox_xyxy": [
+            303.00032,
+            177.99984,
+            326.0,
+            192.99996
+          ],
+          "quadrilateral": [
+            [
+              303.00032,
+              177.99984
+            ],
+            [
+              326.0,
+              177.99984
+            ],
+            [
+              326.0,
+              192.99996
+            ],
+            [
+              303.00032,
+              192.99996
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            6.0,
+            201.99996000000002,
+            120.99968000000001,
+            263.99988
+          ],
+          "quadrilateral": [
+            [
+              6.0,
+              201.99996000000002
+            ],
+            [
+              120.99968000000001,
+              201.99996000000002
+            ],
+            [
+              120.99968000000001,
+              263.99988
+            ],
+            [
+              6.0,
+              263.99988
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            64.99968,
+            172.00008,
+            138.0,
+            219.99996
+          ],
+          "quadrilateral": [
+            [
+              64.99968,
+              172.00008
+            ],
+            [
+              138.0,
+              172.00008
+            ],
+            [
+              138.0,
+              219.99996
+            ],
+            [
+              64.99968,
+              219.99996
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            126.99968,
+            159.00011999999998,
+            168.0,
+            181.00007999999997
+          ],
+          "quadrilateral": [
+            [
+              126.99968,
+              159.00011999999998
+            ],
+            [
+              168.0,
+              159.00011999999998
+            ],
+            [
+              168.0,
+              181.00007999999997
+            ],
+            [
+              126.99968,
+              181.00007999999997
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            288.0,
+            191.99988,
+            337.00032,
+            231.99984
+          ],
+          "quadrilateral": [
+            [
+              288.0,
+              191.99988
+            ],
+            [
+              337.00032,
+              191.99988
+            ],
+            [
+              337.00032,
+              231.99984
+            ],
+            [
+              288.0,
+              231.99984
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            271.00032,
+            156.99996000000002,
+            312.0,
+            176.00004
+          ],
+          "quadrilateral": [
+            [
+              271.00032,
+              156.99996000000002
+            ],
+            [
+              312.0,
+              156.99996000000002
+            ],
+            [
+              312.0,
+              176.00004
+            ],
+            [
+              271.00032,
+              176.00004
+            ]
+          ]
+        }
+      ],
+      "action": "quarantine_all_images_in_conflicting_duplicate_cluster"
+    },
+    {
+      "file_a": "vlcsnap-2025-02-18-17h11m34s646.jpg",
+      "file_b": "vlcsnap-2025-02-18-18h30m17s408.jpg",
+      "sha256_a": "8f19305ad449991b5407db1f760466cf2cfaa54d8eae2c64bb5ad728876e9242",
+      "sha256_b": "8f19305ad449991b5407db1f760466cf2cfaa54d8eae2c64bb5ad728876e9242",
+      "label_sha256_a": "ae9acfd27ac7d38c7463792e86a942b802b31e931ac732653ab981139b0cf391",
+      "label_sha256_b": "47a045fb1f6261dadef31e5f2cd68ac84a63e81002fb00dd9972ce12a629c621",
+      "annotations_a": [
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            252.0,
+            180.0,
+            330.0,
+            280.00007999999997
+          ],
+          "quadrilateral": [
+            [
+              252.0,
+              180.0
+            ],
+            [
+              330.0,
+              180.0
+            ],
+            [
+              330.0,
+              280.00007999999997
+            ],
+            [
+              252.0,
+              280.00007999999997
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            13.00032,
+            168.00012,
+            164.99967999999998,
+            196.99992
+          ],
+          "quadrilateral": [
+            [
+              13.00032,
+              168.00012
+            ],
+            [
+              164.99967999999998,
+              168.00012
+            ],
+            [
+              164.99967999999998,
+              196.99992
+            ],
+            [
+              13.00032,
+              196.99992
+            ]
+          ]
+        },
+        {
+          "category_id": 3,
+          "bbox_xyxy": [
+            332.0,
+            146.99988,
+            355.00032,
+            156.99996000000002
+          ],
+          "quadrilateral": [
+            [
+              332.0,
+              146.99988
+            ],
+            [
+              355.00032,
+              146.99988
+            ],
+            [
+              355.00032,
+              156.99996000000002
+            ],
+            [
+              332.0,
+              156.99996000000002
+            ]
+          ]
+        },
+        {
+          "category_id": 3,
+          "bbox_xyxy": [
+            334.0,
+            133.99992,
+            351.00032,
+            142.99992
+          ],
+          "quadrilateral": [
+            [
+              334.0,
+              133.99992
+            ],
+            [
+              351.00032,
+              133.99992
+            ],
+            [
+              351.00032,
+              142.99992
+            ],
+            [
+              334.0,
+              142.99992
+            ]
+          ]
+        }
+      ],
+      "annotations_b": [
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            27.000320000000002,
+            165.99996,
+            159.00032,
+            201.99996000000002
+          ],
+          "quadrilateral": [
+            [
+              27.000320000000002,
+              165.99996
+            ],
+            [
+              159.00032,
+              165.99996
+            ],
+            [
+              159.00032,
+              201.99996000000002
+            ],
+            [
+              27.000320000000002,
+              201.99996000000002
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            243.00032000000002,
+            177.99984,
+            332.0,
+            277.99992
+          ],
+          "quadrilateral": [
+            [
+              243.00032000000002,
+              177.99984
+            ],
+            [
+              332.0,
+              177.99984
+            ],
+            [
+              332.0,
+              277.99992
+            ],
+            [
+              243.00032000000002,
+              277.99992
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            122.0,
+            141.00011999999998,
+            161.00032,
+            155.00016
+          ],
+          "quadrilateral": [
+            [
+              122.0,
+              141.00011999999998
+            ],
+            [
+              161.00032,
+              141.00011999999998
+            ],
+            [
+              161.00032,
+              155.00016
+            ],
+            [
+              122.0,
+              155.00016
+            ]
+          ]
+        },
+        {
+          "category_id": 3,
+          "bbox_xyxy": [
+            331.00032,
+            146.99988,
+            352.99968,
+            155.99988000000002
+          ],
+          "quadrilateral": [
+            [
+              331.00032,
+              146.99988
+            ],
+            [
+              352.99968,
+              146.99988
+            ],
+            [
+              352.99968,
+              155.99988000000002
+            ],
+            [
+              331.00032,
+              155.99988000000002
+            ]
+          ]
+        },
+        {
+          "category_id": 3,
+          "bbox_xyxy": [
+            331.00032,
+            132.99984,
+            348.99968,
+            141.99984
+          ],
+          "quadrilateral": [
+            [
+              331.00032,
+              132.99984
+            ],
+            [
+              348.99968,
+              132.99984
+            ],
+            [
+              348.99968,
+              141.99984
+            ],
+            [
+              331.00032,
+              141.99984
+            ]
+          ]
+        }
+      ],
+      "action": "quarantine_all_images_in_conflicting_duplicate_cluster"
+    },
+    {
+      "file_a": "vlcsnap-2025-02-19-14h41m29s105.jpg",
+      "file_b": "vlcsnap-2025-02-19-14h41m49s395.jpg",
+      "sha256_a": "165f82cf04ce967cc0aa92fc6a0d4b54b135ac431d1b674ed715413abc3a1610",
+      "sha256_b": "165f82cf04ce967cc0aa92fc6a0d4b54b135ac431d1b674ed715413abc3a1610",
+      "label_sha256_a": "4f495cb9ced6b078167584cda43898a8d07b3bd0885c602a554715329f46473b",
+      "label_sha256_b": "58dd4e21852f5e5e903faf7a6207d84d3527b91f0529f167b65ffd860c992f94",
+      "annotations_a": [
+        {
+          "category_id": 3,
+          "bbox_xyxy": [
+            492.0,
+            288.0,
+            570.0,
+            309.99996
+          ],
+          "quadrilateral": [
+            [
+              492.0,
+              288.0
+            ],
+            [
+              570.0,
+              288.0
+            ],
+            [
+              570.0,
+              309.99996
+            ],
+            [
+              492.0,
+              309.99996
+            ]
+          ]
+        },
+        {
+          "category_id": 1,
+          "bbox_xyxy": [
+            123.00032,
+            264.99996,
+            196.99967999999998,
+            277.99992
+          ],
+          "quadrilateral": [
+            [
+              123.00032,
+              264.99996
+            ],
+            [
+              196.99967999999998,
+              264.99996
+            ],
+            [
+              196.99967999999998,
+              277.99992
+            ],
+            [
+              123.00032,
+              277.99992
+            ]
+          ]
+        },
+        {
+          "category_id": 1,
+          "bbox_xyxy": [
+            142.0,
+            243.00000000000003,
+            213.00032000000002,
+            259.99992000000003
+          ],
+          "quadrilateral": [
+            [
+              142.0,
+              243.00000000000003
+            ],
+            [
+              213.00032000000002,
+              243.00000000000003
+            ],
+            [
+              213.00032000000002,
+              259.99992000000003
+            ],
+            [
+              142.0,
+              259.99992000000003
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            434.0,
+            259.99992000000003,
+            561.00032,
+            324.0
+          ],
+          "quadrilateral": [
+            [
+              434.0,
+              259.99992000000003
+            ],
+            [
+              561.00032,
+              259.99992000000003
+            ],
+            [
+              561.00032,
+              324.0
+            ],
+            [
+              434.0,
+              324.0
+            ]
+          ]
+        }
+      ],
+      "annotations_b": [
+        {
+          "category_id": 1,
+          "bbox_xyxy": [
+            124.99968000000001,
+            263.00016,
+            202.0,
+            276.99984
+          ],
+          "quadrilateral": [
+            [
+              124.99968000000001,
+              263.00016
+            ],
+            [
+              202.0,
+              263.00016
+            ],
+            [
+              202.0,
+              276.99984
+            ],
+            [
+              124.99968000000001,
+              276.99984
+            ]
+          ]
+        },
+        {
+          "category_id": 1,
+          "bbox_xyxy": [
+            144.99968,
+            245.00016000000002,
+            213.00032000000002,
+            261.0
+          ],
+          "quadrilateral": [
+            [
+              144.99968,
+              245.00016000000002
+            ],
+            [
+              213.00032000000002,
+              245.00016000000002
+            ],
+            [
+              213.00032000000002,
+              261.0
+            ],
+            [
+              144.99968,
+              261.0
+            ]
+          ]
+        }
+      ],
+      "action": "quarantine_all_images_in_conflicting_duplicate_cluster"
+    },
+    {
+      "file_a": "vlcsnap-2025-02-19-15h02m56s842.jpg",
+      "file_b": "vlcsnap-2025-02-19-15h03m10s511.jpg",
+      "sha256_a": "9e4a6bedd8179627470a502275e422491ff6a1ae17d1509a8c2c195cf83e1362",
+      "sha256_b": "9e4a6bedd8179627470a502275e422491ff6a1ae17d1509a8c2c195cf83e1362",
+      "label_sha256_a": "8acc2adad5d5309fca27b8fa888860ffaba253f819d7a3d44d13d00e3f1fef5b",
+      "label_sha256_b": "eaf40a5f3e89497b18d68c82db4a360551d07c4b4ab02850ebf2e8a31610fa45",
+      "annotations_a": [
+        {
+          "category_id": 1,
+          "bbox_xyxy": [
+            201.00032,
+            213.00012,
+            240.0,
+            231.00011999999998
+          ],
+          "quadrilateral": [
+            [
+              201.00032,
+              213.00012
+            ],
+            [
+              240.0,
+              213.00012
+            ],
+            [
+              240.0,
+              231.00011999999998
+            ],
+            [
+              201.00032,
+              231.00011999999998
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            193.00032000000002,
+            210.99996000000002,
+            255.00032000000002,
+            270.0
+          ],
+          "quadrilateral": [
+            [
+              193.00032000000002,
+              210.99996000000002
+            ],
+            [
+              255.00032000000002,
+              210.99996000000002
+            ],
+            [
+              255.00032000000002,
+              270.0
+            ],
+            [
+              193.00032000000002,
+              270.0
+            ]
+          ]
+        }
+      ],
+      "annotations_b": [
+        {
+          "category_id": 1,
+          "bbox_xyxy": [
+            206.99967999999998,
+            213.00012,
+            238.99968,
+            236.00016000000002
+          ],
+          "quadrilateral": [
+            [
+              206.99967999999998,
+              213.00012
+            ],
+            [
+              238.99968,
+              213.00012
+            ],
+            [
+              238.99968,
+              236.00016000000002
+            ],
+            [
+              206.99967999999998,
+              236.00016000000002
+            ]
+          ]
+        }
+      ],
+      "action": "quarantine_all_images_in_conflicting_duplicate_cluster"
+    },
+    {
+      "file_a": "vlcsnap-2025-02-26-20h36m03s983.jpg",
+      "file_b": "vlcsnap-2025-02-26-20h36m04s054.jpg",
+      "sha256_a": "091e2a950a5dcc7990dcf7708d191a64aa4ca3af16d0f292669d9d326771a5f8",
+      "sha256_b": "091e2a950a5dcc7990dcf7708d191a64aa4ca3af16d0f292669d9d326771a5f8",
+      "label_sha256_a": "ef5cc91486777e528e7373bb2e3d73fc93541bb975e12e23f972a4b5ef4d426a",
+      "label_sha256_b": "e306a4858d58f45c38f4fe063b1932c58d53e48f793d856d720a62fe0f98a444",
+      "annotations_a": [
+        {
+          "category_id": 3,
+          "bbox_xyxy": [
+            110.0,
+            258.00012000000004,
+            196.99967999999998,
+            276.99984
+          ],
+          "quadrilateral": [
+            [
+              110.0,
+              258.00012000000004
+            ],
+            [
+              196.99967999999998,
+              258.00012000000004
+            ],
+            [
+              196.99967999999998,
+              276.99984
+            ],
+            [
+              110.0,
+              276.99984
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            266.99968,
+            251.99999999999997,
+            316.0,
+            295.99992
+          ],
+          "quadrilateral": [
+            [
+              266.99968,
+              251.99999999999997
+            ],
+            [
+              316.0,
+              251.99999999999997
+            ],
+            [
+              316.0,
+              295.99992
+            ],
+            [
+              266.99968,
+              295.99992
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            356.0,
+            281.99987999999996,
+            380.0,
+            303.99984
+          ],
+          "quadrilateral": [
+            [
+              356.0,
+              281.99987999999996
+            ],
+            [
+              380.0,
+              281.99987999999996
+            ],
+            [
+              380.0,
+              303.99984
+            ],
+            [
+              356.0,
+              303.99984
+            ]
+          ]
+        }
+      ],
+      "annotations_b": [
+        {
+          "category_id": 3,
+          "bbox_xyxy": [
+            103.00032,
+            250.99992,
+            196.99967999999998,
+            280.00007999999997
+          ],
+          "quadrilateral": [
+            [
+              103.00032,
+              250.99992
+            ],
+            [
+              196.99967999999998,
+              250.99992
+            ],
+            [
+              196.99967999999998,
+              280.00007999999997
+            ],
+            [
+              103.00032,
+              280.00007999999997
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            268.0,
+            250.99992,
+            316.0,
+            299.99988
+          ],
+          "quadrilateral": [
+            [
+              268.0,
+              250.99992
+            ],
+            [
+              316.0,
+              250.99992
+            ],
+            [
+              316.0,
+              299.99988
+            ],
+            [
+              268.0,
+              299.99988
+            ]
+          ]
+        },
+        {
+          "category_id": 2,
+          "bbox_xyxy": [
+            358.0,
+            282.99996,
+            378.0,
+            309.99996
+          ],
+          "quadrilateral": [
+            [
+              358.0,
+              282.99996
+            ],
+            [
+              378.0,
+              282.99996
+            ],
+            [
+              378.0,
+              309.99996
+            ],
+            [
+              358.0,
+              309.99996
+            ]
+          ]
+        }
+      ],
+      "action": "quarantine_all_images_in_conflicting_duplicate_cluster"
+    }
+  ],
+  "quarantined_canonical_images": [
+    "vlcsnap-2025-02-18-17h03m41s574.jpg",
+    "vlcsnap-2025-02-18-17h11m34s646.jpg",
+    "vlcsnap-2025-02-19-14h41m29s105.jpg",
+    "vlcsnap-2025-02-19-15h02m56s842.jpg",
+    "vlcsnap-2025-02-26-20h36m03s983.jpg"
+  ],
+  "ignored_subfolders": true,
+  "orphan_labels": [],
+  "grouping": "filename date (proxy, NOT verified capture session); unknown files held together",
+  "limitations": [
+    "Exact decoded-image duplicates are removed; near duplicates and repeated roads require visual/metadata review.",
+    "Filename timestamps may be extraction times; date grouping does not prove route or device independence.",
+    "Quadrilaterals are enclosure annotations, not pixel-level damage masks.",
+    "All eligible quadrilaterals are axis-aligned; auxiliary orientation is box-shape supervision, not physical crack direction."
+  ],
+  "splits": {
+    "train": {
+      "images": 1394,
+      "groups": [
+        "filename_date:2025-02-18",
+        "filename_date:2025-02-19"
+      ],
+      "instances": {
+        "pothole": 889,
+        "crack": 1654,
+        "manhole": 746
+      }
+    },
+    "val": {
+      "images": 348,
+      "groups": [
+        "filename_date:2025-03-16",
+        "unknown_session"
+      ],
+      "instances": {
+        "pothole": 156,
+        "crack": 495,
+        "manhole": 89
+      }
+    },
+    "test": {
+      "images": 257,
+      "groups": [
+        "filename_date:2025-02-16",
+        "filename_date:2025-02-23",
+        "filename_date:2025-02-26"
+      ],
+      "instances": {
+        "pothole": 208,
+        "crack": 349,
+        "manhole": 115
+      }
+    }
+  },
+  "resolution_counts": {
+    "640x360": 1999
+  },
+  "geometry_annotation_counts": {
+    "axis_aligned": 4656,
+    "disabled": 45
+  },
+  "requested_ratios": [
+    0.7,
+    0.15,
+    0.15
+  ],
+  "actual_ratios": [
+    0.6973486743371686,
+    0.17408704352176088,
+    0.12856428214107055
+  ],
+  "ratio_warning": false
+}

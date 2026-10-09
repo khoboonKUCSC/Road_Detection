@@ -1,0 +1,45 @@
+data_root: ../data
+manifest: artifacts/dataset/manifest.json
+output_root: runs/smoke_verified
+device: cpu
+seeds: [0]
+experiments:
+  - name: smoke_baseline
+    architecture: tiny_smoke
+    geometry_mode: none
+  - name: smoke_geometry
+    architecture: tiny_smoke
+    geometry_mode: full
+model:
+  pretrained: false
+  min_size: 64
+  max_size: 128
+  score_floor: 0.001
+  geometry_weight: 0.2
+  crack_only: true
+training:
+  epochs: 2
+  patience: 2
+  batch_size: 2
+  workers: 0
+  lr: 0.001
+  weight_decay: 0.0001
+  amp: false
+  grad_clip: 10.0
+  deterministic: true
+  cpu_threads: 2
+  val_every: 1
+  save_every: 1
+  limit_train: 4
+  limit_eval: 3
+  crack_crop_probability: 0.5
+  crack_crop_size: 256
+evaluation:
+  batch_size: 1
+  visualizations: 3
+  tiling: false
+  tile_size: 384
+  tile_overlap: 0.25
+  tile_nms: 0.5
+  include_full_image: true
+  warmup_images: 1

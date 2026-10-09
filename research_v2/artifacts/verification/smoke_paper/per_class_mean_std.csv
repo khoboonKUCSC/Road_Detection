@@ -1,0 +1,7 @@
+experiment,class,n_seeds,AP_mean,AP_std,AP50_mean,AP50_std,precision_mean,precision_std,recall_mean,recall_std,F1_mean,F1_std,FP_per_image_mean,FP_per_image_std
+smoke_baseline,pothole,1,0.0,,0.0,,0.0,,0.0,,0.0,,0.0,
+smoke_baseline,crack,1,0.0,,0.0,,0.0,,0.0,,0.0,,0.0,
+smoke_baseline,manhole,1,0.0,,0.0,,0.0,,0.0,,0.0,,0.0,
+smoke_geometry,pothole,1,0.0,,0.0,,0.0,,0.0,,0.0,,0.0,
+smoke_geometry,crack,1,0.0,,0.0,,0.0,,0.0,,0.0,,0.0,
+smoke_geometry,manhole,1,0.0,,0.0,,0.0,,0.0,,0.0,,0.0,

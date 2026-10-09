@@ -1,0 +1,9 @@
+{
+  "best_validation_AP": 0.0,
+  "epochs_completed": 2,
+  "selected_checkpoint": "best.pt",
+  "selection_metric": "validation COCO bbox AP50:95",
+  "training_seconds": 0.5455393430020195,
+  "peak_cuda_memory_GB": null,
+  "smoke_only": true
+}

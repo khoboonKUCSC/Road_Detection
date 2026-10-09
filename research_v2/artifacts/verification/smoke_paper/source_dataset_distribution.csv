@@ -1,0 +1,4 @@
+split,images,groups,pothole,crack,manhole
+test,257,3,208,349,115
+train,1394,2,889,1654,746
+val,348,2,156,495,89

@@ -1,0 +1,10 @@
+{
+  "source_metrics": [
+    "/home/patipat/Desktop/Project_DS/2026/Road_Damage/research_v2/runs/smoke_registered/smoke_baseline_seed0/eval/test_metrics.json",
+    "/home/patipat/Desktop/Project_DS/2026/Road_Damage/research_v2/runs/smoke_registered/smoke_geometry_seed0/eval/test_metrics.json"
+  ],
+  "split": "test",
+  "tiled": false,
+  "smoke_only": true,
+  "manifest_sha256": "b9ed848315815d0b7b22ccd7ab4b153a23da373895624614a334b6ba513ef980"
+}

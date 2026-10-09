@@ -1,0 +1,5 @@
+learning_rates: [0.0001, 0.0003, 0.001]
+weight_decays: [0.0001]
+seeds: [0]
+epochs: 40
+patience: 10

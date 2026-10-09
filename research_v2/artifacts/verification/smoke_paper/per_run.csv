@@ -1,0 +1,3 @@
+experiment,seed,split,smoke_only,AP,AP50,AP75,AP_shared_damage,AP_small,AP_medium,AP_large,macro_F1,latency_ms,parameters,best_epoch,manifest_sha256,run
+smoke_baseline,0,test,True,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,18.632484663006228,1382352,1,b9ed848315815d0b7b22ccd7ab4b153a23da373895624614a334b6ba513ef980,smoke_baseline_seed0
+smoke_geometry,0,test,True,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,17.607789670970913,1401043,1,b9ed848315815d0b7b22ccd7ab4b153a23da373895624614a334b6ba513ef980,smoke_geometry_seed0

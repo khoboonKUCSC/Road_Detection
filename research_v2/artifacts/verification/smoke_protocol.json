@@ -1,0 +1,105 @@
+{
+  "schema_version": 2,
+  "config": {
+    "data_root": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/data",
+    "manifest": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/research_v2/artifacts/dataset/manifest.json",
+    "output_root": "/home/patipat/Desktop/Project_DS/2026/Road_Damage/research_v2/runs/smoke_registered",
+    "device": "cpu",
+    "seeds": [
+      0
+    ],
+    "experiments": [
+      {
+        "name": "smoke_baseline",
+        "architecture": "tiny_smoke",
+        "geometry_mode": "none"
+      },
+      {
+        "name": "smoke_geometry",
+        "architecture": "tiny_smoke",
+        "geometry_mode": "full"
+      }
+    ],
+    "model": {
+      "pretrained": false,
+      "min_size": 64,
+      "max_size": 128,
+      "score_floor": 0.001,
+      "geometry_weight": 0.2,
+      "crack_only": true
+    },
+    "training": {
+      "epochs": 2,
+      "patience": 2,
+      "batch_size": 2,
+      "workers": 0,
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "amp": false,
+      "grad_clip": 10.0,
+      "deterministic": true,
+      "cpu_threads": 2,
+      "val_every": 1,
+      "save_every": 1,
+      "limit_train": 4,
+      "limit_eval": 3,
+      "crack_crop_probability": 0.5,
+      "crack_crop_size": 256
+    },
+    "evaluation": {
+      "batch_size": 1,
+      "visualizations": 3,
+      "tiling": false,
+      "tile_size": 384,
+      "tile_overlap": 0.25,
+      "tile_nms": 0.5,
+      "include_full_image": true,
+      "warmup_images": 1
+    },
+    "study": {
+      "require_registration": true,
+      "bootstrap_repeats": 4,
+      "comparisons": [
+        [
+          "smoke_baseline",
+          "smoke_geometry"
+        ]
+      ]
+    }
+  },
+  "manifest_sha256": "b9ed848315815d0b7b22ccd7ab4b153a23da373895624614a334b6ba513ef980",
+  "similarity_audit_sha256": "b48eb1f79fb812a4fddfc10c9b49de1ee24d64f84be305d77d34e2dbfa3f411c",
+  "decisions_sha256": "b2eca9fa008fc96e26ac8ee155db8ea160ce36ddac27078b638d0ae311787da5",
+  "capture_metadata_verified": false,
+  "unresolved_similarity_pairs": [],
+  "exploratory": true,
+  "entries": [
+    {
+      "run": "smoke_baseline_seed0",
+      "checkpoint_sha256": "1c4242ec0c917e30ed558a881e5d522ef20ff9162fb10586c387f284cda863ca",
+      "config_sha256": "d78db25032f4d5ea4a7b4bb9606b49e8a5941cca02b3c1e2d9042fda11cc8543",
+      "thresholds_sha256": "91f9e9b3be6d19f4a6f58ab48c8d83120d2a82a6099c64398dec94a1563459d6"
+    },
+    {
+      "run": "smoke_geometry_seed0",
+      "checkpoint_sha256": "29684a34df3f339c45e352277510b84b8376fcf44723c14098a521f39f55ded3",
+      "config_sha256": "8c2f203de131fed00fd239fe917791993a78d25c95b258805e4555fc4c6f8cfb",
+      "thresholds_sha256": "1b97a6aa8dc04846a4e6def0dee9b3069955620e8dc6fd9719c13f2bd32d4753"
+    }
+  ],
+  "primary_endpoint": "COCO bbox AP50:95",
+  "secondary_endpoints": [
+    "crack AP",
+    "AP50",
+    "validation-frozen macro F1",
+    "end-to-end latency"
+  ],
+  "bootstrap": {
+    "unit": "whole manifest group",
+    "paired": true,
+    "repeats": 4
+  },
+  "external_manifest": null,
+  "external_manifest_sha256": null,
+  "interpretation": "Training seed SD and paired group percentile CI are distinct uncertainties; no guaranteed novelty or significant improvement."
+}

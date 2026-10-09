@@ -1,0 +1,6 @@
+{
+  "reviewed_cross_split_pairs": 2,
+  "decision": "visually different scenes",
+  "capture_metadata_verified": false,
+  "scope": "Only the 2 flagged cross-split pairs; perceptual-hash false negatives remain possible."
+}

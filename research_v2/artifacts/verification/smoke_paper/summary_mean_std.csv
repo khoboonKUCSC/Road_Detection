@@ -1,0 +1,3 @@
+experiment,n_seeds,seeds,AP_mean,AP_std,AP50_mean,AP50_std,AP75_mean,AP75_std,AP_shared_damage_mean,AP_shared_damage_std,macro_F1_mean,macro_F1_std,latency_ms_mean,latency_ms_std
+smoke_baseline,1,0,0.0,,0.0,,0.0,,0.0,,0.0,,18.632484663006228,
+smoke_geometry,1,0,0.0,,0.0,,0.0,,0.0,,0.0,,17.607789670970913,
