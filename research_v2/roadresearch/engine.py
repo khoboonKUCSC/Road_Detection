@@ -134,7 +134,12 @@ def train(config, run_dir, resume=False):
         if not resume:
             raise FileExistsError(f"Run exists: {run_dir}. Use --resume or a NEW output_root.")
         checkpoint = load_checkpoint(run_dir / "last.pt")
-        if checkpoint["manifest_sha256"] != fingerprint or checkpoint["config"] != config:
+        cfg_match = (checkpoint["config"] == config)
+        if not cfg_match and (run_dir / "migration.json").exists():
+            c1 = {k: v for k, v in checkpoint["config"].items() if k != "output_root"}
+            c2 = {k: v for k, v in config.items() if k != "output_root"}
+            cfg_match = (c1 == c2)
+        if checkpoint["manifest_sha256"] != fingerprint or not cfg_match:
             raise ValueError("Resume requires the exact original config and manifest, including epochs and paths")
     elif resume and (run_dir / "config.json").exists():
         raise ValueError("Run metadata exists but last.pt is missing; use a NEW output directory")
@@ -197,12 +202,17 @@ def train(config, run_dir, resume=False):
         return run_dir
     previous_seconds = checkpoint.get("training_seconds", 0.) if checkpoint else 0.
     clock_start = time.perf_counter()
+    overflow_events = list(checkpoint.get("overflow_events", [])) if checkpoint else []
+    total_skipped_amp_steps = int(checkpoint.get("total_skipped_amp_steps", 0)) if checkpoint else 0
+    max_consecutive_overflows = int(config["training"].get("max_consecutive_amp_overflows", 20))
+    consecutive_skipped_amp_steps = 0
     for epoch in range(start_epoch, config["training"]["epochs"]):
         model.train()
         totals = {}
         steps = 0
+        epoch_skipped_amp_steps = 0
         lr_used = optimizer.param_groups[0]["lr"]
-        for images, targets in train_loader:
+        for batch_idx, (images, targets) in enumerate(train_loader):
             images = [im.to(device, non_blocking=True) for im in images]
             targets = [{k: v.to(device, non_blocking=True) for k, v in target.items()} for target in targets]
             optimizer.zero_grad(set_to_none=True)
@@ -214,6 +224,56 @@ def train(config, run_dir, resume=False):
                 raise FloatingPointError(f"Nonfinite training loss at epoch {epoch}: {losses}")
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
+
+            bad_grads = [name for name, p in model.named_parameters()
+                         if p.grad is not None and not torch.isfinite(p.grad).all()]
+            if bad_grads:
+                scale_before = float(scaler.get_scale())
+                image_ids = [int(t["image_id"].item()) if hasattr(t["image_id"], "item") else int(t["image_id"])
+                             for t in targets if "image_id" in t]
+                event = {
+                    "epoch": epoch + 1,
+                    "batch": batch_idx + 1,
+                    "step": steps + 1,
+                    "image_ids": image_ids,
+                    "losses": {k: float(v.detach()) for k, v in losses.items()},
+                    "scale": scale_before,
+                    "scale_before": scale_before,
+                    "bad_parameter_count": len(bad_grads),
+                    "parameters": bad_grads[:10],
+                }
+                if not scaler.is_enabled():
+                    raise FloatingPointError(f"Nonfinite gradients with AMP disabled: {event}")
+
+                if hasattr(scaler, "_per_optimizer_states"):
+                    opt_state = scaler._per_optimizer_states[id(optimizer)]
+                    if "found_inf_per_device" in opt_state:
+                        if not opt_state["found_inf_per_device"]:
+                            opt_state["found_inf_per_device"][device] = torch.tensor(1.0, device=device)
+                        else:
+                            for dev_key in opt_state["found_inf_per_device"]:
+                                opt_state["found_inf_per_device"][dev_key].fill_(1.0)
+
+                scaler.step(optimizer)
+                scaler.update()
+                scale_after = float(scaler.get_scale())
+                event["scale_after"] = scale_after
+
+                epoch_skipped_amp_steps += 1
+                total_skipped_amp_steps += 1
+                consecutive_skipped_amp_steps += 1
+                overflow_events.append(event)
+                with open(run_dir / "overflow_events.jsonl", "a", encoding="utf-8") as stream:
+                    stream.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+                if consecutive_skipped_amp_steps > max_consecutive_overflows:
+                    raise FloatingPointError(
+                        f"Exceeded maximum consecutive AMP overflow steps ({max_consecutive_overflows}): {event}"
+                    )
+                optimizer.zero_grad(set_to_none=True)
+                continue
+
+            consecutive_skipped_amp_steps = 0
             torch.nn.utils.clip_grad_norm_(model.parameters(), config["training"]["grad_clip"], error_if_nonfinite=True)
             scaler.step(optimizer)
             scaler.update()
@@ -221,7 +281,8 @@ def train(config, run_dir, resume=False):
             for key, value in {**losses, "loss_total": loss}.items():
                 totals[key] = totals.get(key, 0.) + float(value.detach())
         scheduler.step()
-        row = {"epoch": epoch+1, "lr": lr_used, **{key: value/steps for key, value in totals.items()}}
+        loss_averages = {key: (value / steps if steps > 0 else 0.0) for key, value in totals.items()}
+        row = {"epoch": epoch+1, "lr": lr_used, **loss_averages, "skipped_amp_steps": epoch_skipped_amp_steps}
         do_val = (epoch+1) % config["training"]["val_every"] == 0 or epoch+1 == config["training"]["epochs"]
         is_best = False
         if do_val:
@@ -253,7 +314,9 @@ def train(config, run_dir, resume=False):
                  "training_seconds": previous_seconds+time.perf_counter()-clock_start,
                  "peak_cuda_memory_GB": max(checkpoint.get("peak_cuda_memory_GB", 0.) or 0.,
                                             torch.cuda.max_memory_allocated(device)/1024**3) if device.type == "cuda" and checkpoint else
-                                        (torch.cuda.max_memory_allocated(device)/1024**3 if device.type == "cuda" else None)}
+                                        (torch.cuda.max_memory_allocated(device)/1024**3 if device.type == "cuda" else None),
+                 "overflow_events": overflow_events[-10:],
+                 "total_skipped_amp_steps": total_skipped_amp_steps}
         atomic_checkpoint(run_dir / "last.pt", state)
         if is_best:
             atomic_checkpoint(run_dir / "best.pt", state)
@@ -384,3 +447,28 @@ def evaluate(run_dir, data_root=None, split="test", external_manifest=None, tili
     failure_analysis(ds, predictions, thresholds, output/f"{split}_failure_analysis.json")
     print(f"{run_dir.name} {split}: AP={metrics['AP']:.4f}, AP50={metrics['AP50']:.4f}", flush=True)
     return metrics
+
+
+def migrate_run(source_dir, destination_dir, reason="AMP non-finite gradient handling fix"):
+    source_dir = Path(source_dir)
+    destination_dir = Path(destination_dir)
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("best.pt", "last.pt", "manifest.json", "history.json", "history.csv"):
+        if (source_dir / name).exists():
+            shutil.copy2(source_dir / name, destination_dir / name)
+    cfg = read_json(source_dir / "config.json")
+    save_json(destination_dir / "config.json", cfg)
+    save_json(destination_dir / "environment.json", environment())
+    source_snapshot(destination_dir)
+    migration_meta = {
+        "migrated_from": str(source_dir.resolve()),
+        "reason": reason,
+        "original_last_checkpoint": str((source_dir / "last.pt").resolve()),
+        "source_sha256_discontinuity": {
+            "original_sha256": read_json(source_dir / "source_sha256.json") if (source_dir / "source_sha256.json").exists() else None,
+            "migrated_sha256": read_json(destination_dir / "source_sha256.json"),
+        },
+    }
+    save_json(destination_dir / "migration.json", migration_meta)
+    return destination_dir
+

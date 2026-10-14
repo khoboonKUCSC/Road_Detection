@@ -176,8 +176,108 @@ def test_epoch_boundary_resume_equivalence(tmp_path, monkeypatch):
     engine.train(cfg, tmp_path / "interrupted", resume=True)
     a, b = load_checkpoint(tmp_path / "continuous/last.pt"), load_checkpoint(tmp_path / "interrupted/last.pt")
     assert a["history"] == b["history"]
+    assert a["total_skipped_amp_steps"] == b["total_skipped_amp_steps"]
+    assert a["overflow_events"] == b["overflow_events"]
     for key in a["model"]:
         assert torch.equal(a["model"][key], b["model"][key]), key
+
+
+def test_finite_gradient_step_clips_and_updates(tmp_path):
+    from roadresearch import engine
+    root = fixture_data(tmp_path)
+    manifest_path = tmp_path / "prepared/manifest.json"
+    prepare(root, manifest_path.parent)
+    base = config_load(ROOT / "configs/smoke_cpu.yaml")
+    cfg = experiment_config(base, base["experiments"][0], 0)
+    cfg.update(data_root=str(root), manifest=str(manifest_path))
+    cfg["training"].update(limit_train=2, limit_eval=2, epochs=1, grad_clip=0.01)
+    run_dir = tmp_path / "finite_step"
+    engine.train(cfg, run_dir)
+    ckpt = load_checkpoint(run_dir / "last.pt")
+    assert ckpt["history"][0]["skipped_amp_steps"] == 0
+    assert ckpt["total_skipped_amp_steps"] == 0
+    assert len(ckpt["overflow_events"]) == 0
+    assert not (run_dir / "overflow_events.jsonl").exists()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required for AMP scaler test")
+def test_amp_nonfinite_gradient_skips_step_and_backs_off(tmp_path):
+    from roadresearch import engine
+    root = fixture_data(tmp_path)
+    manifest_path = tmp_path / "prepared/manifest.json"
+    prepare(root, manifest_path.parent)
+    base = config_load(ROOT / "configs/smoke_cpu.yaml")
+    cfg = experiment_config(base, base["experiments"][0], 0)
+    cfg.update(data_root=str(root), manifest=str(manifest_path), device="cuda")
+    cfg["training"].update(limit_train=4, limit_eval=2, epochs=1, patience=5, amp=True, batch_size=2)
+    run_dir = tmp_path / "amp_nan"
+
+    orig_unscale = torch.amp.GradScaler.unscale_
+    call_count = 0
+
+    def unscale_mock(scaler_self, optimizer):
+        nonlocal call_count
+        call_count += 1
+        orig_unscale(scaler_self, optimizer)
+        if call_count == 1:
+            p = next(p for p in optimizer.param_groups[0]["params"] if p.grad is not None)
+            p.grad.data.fill_(float("nan"))
+
+    torch.amp.GradScaler.unscale_ = unscale_mock
+    try:
+        engine.train(cfg, run_dir)
+    finally:
+        torch.amp.GradScaler.unscale_ = orig_unscale
+
+    ckpt = load_checkpoint(run_dir / "last.pt")
+    assert ckpt["history"][0]["skipped_amp_steps"] == 1
+    assert ckpt["total_skipped_amp_steps"] == 1
+    assert len(ckpt["overflow_events"]) == 1
+    event = ckpt["overflow_events"][0]
+    assert event["epoch"] == 1
+    assert event["step"] == 1
+    assert len(event["image_ids"]) > 0
+    assert event["scale_before"] == 65536.0
+    assert event["scale_after"] == 32768.0
+    assert event["bad_parameter_count"] >= 1
+    assert len(event["parameters"]) >= 1
+    assert ckpt["scaler"]["scale"] == 32768.0
+    jsonl_lines = (run_dir / "overflow_events.jsonl").read_text().splitlines()
+    assert len(jsonl_lines) == 1
+
+
+def test_nonfinite_gradient_amp_disabled_raises_floating_point_error(tmp_path):
+    from roadresearch import engine
+    root = fixture_data(tmp_path)
+    manifest_path = tmp_path / "prepared/manifest.json"
+    prepare(root, manifest_path.parent)
+    base = config_load(ROOT / "configs/smoke_cpu.yaml")
+    cfg = experiment_config(base, base["experiments"][0], 0)
+    cfg.update(data_root=str(root), manifest=str(manifest_path), device="cpu")
+    cfg["training"].update(limit_train=2, limit_eval=2, epochs=1, patience=5, amp=False)
+    run_dir = tmp_path / "cpu_nan"
+
+    orig_unscale = torch.amp.GradScaler.unscale_
+
+    def unscale_mock(scaler_self, optimizer):
+        orig_unscale(scaler_self, optimizer)
+        for p in optimizer.param_groups[0]["params"]:
+            if p.grad is not None:
+                p.grad.data.fill_(float("nan"))
+                break
+
+    torch.amp.GradScaler.unscale_ = unscale_mock
+    try:
+        with pytest.raises(FloatingPointError) as exc_info:
+            engine.train(cfg, run_dir)
+        err = str(exc_info.value)
+        assert "Nonfinite gradients with AMP disabled" in err
+        assert "image_ids" in err
+        assert "losses" in err
+        assert "detector.backbone.net.0.weight" in err
+    finally:
+        torch.amp.GradScaler.unscale_ = orig_unscale
+
 
 
 @pytest.mark.parametrize("architecture,mode", [("fasterrcnn_r50_fpn_v2", "full"), ("fcos_r50_fpn", "none")])

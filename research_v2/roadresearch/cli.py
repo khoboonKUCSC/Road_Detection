@@ -134,6 +134,10 @@ def main(argv=None):
     pred.add_argument("--output", required=True)
     pred.add_argument("--device", default="cuda")
     pred.add_argument("--tiled", action="store_true", default=None)
+    mig = commands.add_parser("migrate", help="Migrate a run directory to a new directory with current source snapshot")
+    mig.add_argument("--source", required=True)
+    mig.add_argument("--destination", required=True)
+    mig.add_argument("--reason", default="AMP non-finite gradient handling fix")
     args = parser.parse_args(argv)
     if args.command == "doctor":
         import torch
@@ -221,6 +225,10 @@ def main(argv=None):
         print({k: v for k, v in result.items() if k != "samples"})
     elif args.command == "predict":
         predict_image(args)
+    elif args.command == "migrate":
+        from .engine import migrate_run
+        migrate_run(args.source, args.destination, args.reason)
+        print(f"Migrated run from {args.source} to {args.destination}")
 
 
 def predict_image(args):
