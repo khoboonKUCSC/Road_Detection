@@ -36,12 +36,22 @@ def report(output_root, destination, split="test", tiled=False):
     for metrics_path in sorted(output_root.glob(f"*/{protocol}/{split}_metrics.json")):
         run = metrics_path.parent.parent
         cfg, metrics = read_json(run / "config.json"), read_json(metrics_path)
+        init_file = run / "initialization.json"
+        if not init_file.exists():
+            migrated_info = ""
+            if (run / "migration.json").exists():
+                mig = read_json(run / "migration.json")
+                source_from = mig.get("migrated_from", "the recorded source")
+                migrated_info = f" (migrated run; restore it from the recorded migrated_from source {source_from} or rerun migration)"
+            raise FileNotFoundError(
+                f"Run {run.name} cannot be reported: missing initialization.json{migrated_info}."
+            )
         row = {"experiment": cfg["experiment"], "seed": cfg["seed"], "split": split,
                "smoke_only": metrics["smoke_only"], "AP": metrics["AP"], "AP50": metrics["AP50"],
                "AP75": metrics["AP75"], "AP_shared_damage": metrics.get("AP_shared_damage"), "AP_small": metrics["AP_small"],
                "AP_medium": metrics["AP_medium"], "AP_large": metrics["AP_large"],
                "macro_F1": metrics["operating_point"]["macro_F1"], "latency_ms": metrics["latency"]["mean_ms"],
-               "parameters": read_json(run / "initialization.json")["parameters"],
+               "parameters": read_json(init_file)["parameters"],
                "best_epoch": metrics["checkpoint_epoch"], "manifest_sha256": metrics["manifest_sha256"],
                "run": run.name}
         rows.append(row)

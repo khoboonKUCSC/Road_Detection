@@ -309,3 +309,70 @@ def test_real_architecture_forward_backward_reload(architecture, mode):
     with torch.inference_mode():
         prediction = reloaded([image])[0]
     assert prediction["boxes"].shape[1] == 4
+
+
+def test_migrate_run_preserves_initialization_metadata(tmp_path):
+    from roadresearch.engine import migrate_run
+    from roadresearch.utils import read_json, save_json
+
+    source = tmp_path / "source_run"
+    source.mkdir()
+    (source / "best.pt").write_bytes(b"best_data")
+    (source / "last.pt").write_bytes(b"last_data")
+    save_json(source / "manifest.json", {"records": []})
+    save_json(source / "history.json", [{"epoch": 1}])
+    (source / "history.csv").write_text("epoch\n1\n")
+    save_json(source / "config.json", {"experiment": "test_exp", "seed": 0})
+    save_json(source / "source_sha256.json", {"dummy.py": "abc123hash"})
+    init_data = {
+        "pretrained": True, "weights": "COCO_V1", "seed": 0,
+        "architecture": "fasterrcnn_r50_fpn_v2", "geometry_mode": "none",
+        "parameters": 43266403, "trainable_parameters": 43041059
+    }
+    save_json(source / "initialization.json", init_data)
+
+    dest = tmp_path / "dest_run"
+    migrate_run(source, dest, reason="test initialization preservation")
+
+    assert (dest / "initialization.json").exists()
+    assert read_json(dest / "initialization.json") == init_data
+    assert (dest / "migration.json").exists()
+    assert (dest / "best.pt").read_bytes() == b"best_data"
+    assert (dest / "last.pt").read_bytes() == b"last_data"
+    assert (dest / "history.csv").read_text() == "epoch\n1\n"
+    assert (dest / "manifest.json").exists()
+    assert (dest / "history.json").exists()
+
+
+def test_report_missing_initialization_raises_contextual_error(tmp_path):
+    from roadresearch.report import report
+    from roadresearch.utils import save_json
+
+    output_root = tmp_path / "runs"
+    run_dir = output_root / "fasterrcnn_baseline_seed0"
+    (run_dir / "eval").mkdir(parents=True)
+    save_json(run_dir / "config.json", {"experiment": "fasterrcnn_baseline", "seed": 0})
+    save_json(run_dir / "eval/val_metrics.json", {
+        "smoke_only": False, "AP": 0.15, "AP50": 0.25, "AP75": 0.15,
+        "AP_small": 0.05, "AP_medium": 0.15, "AP_large": 0.25,
+        "checkpoint_epoch": 18, "manifest_sha256": "fake_hash",
+        "latency": {"mean_ms": 10.0},
+        "operating_point": {"macro_F1": 0.5, "per_class": {c: {} for c in ["pothole", "crack", "manhole"]}},
+        "per_class": {c: {"AP": 0.15, "AP50": 0.25} for c in ["pothole", "crack", "manhole"]},
+        "confusion_matrix": [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+        "confusion_labels": ["pothole", "crack", "manhole", "background"],
+    })
+    save_json(run_dir / "history.json", [{"epoch": 1, "loss_total": 0.5, "val_AP": 0.15, "val_AP50": 0.25}])
+    save_json(run_dir / "eval/val_pr_curves.json", {c: {"recall": [0, 1], "precision50": [1, 0]} for c in ["pothole", "crack", "manhole"]})
+    save_json(run_dir / "migration.json", {"migrated_from": "/path/to/orig/fasterrcnn_baseline_seed0"})
+
+    dest = tmp_path / "report_out"
+    with pytest.raises(FileNotFoundError) as exc_info:
+        report(output_root, dest, split="val")
+
+    err_msg = str(exc_info.value)
+    assert "fasterrcnn_baseline_seed0" in err_msg
+    assert "missing initialization.json" in err_msg
+    assert "migrated run" in err_msg
+    assert "/path/to/orig/fasterrcnn_baseline_seed0" in err_msg
+

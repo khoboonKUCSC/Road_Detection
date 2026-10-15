@@ -462,7 +462,7 @@ def migrate_run(source_dir, destination_dir, reason="AMP non-finite gradient han
     source_dir = Path(source_dir)
     destination_dir = Path(destination_dir)
     destination_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("best.pt", "last.pt", "manifest.json", "history.json", "history.csv"):
+    for name in ("best.pt", "last.pt", "manifest.json", "history.json", "history.csv", "initialization.json"):
         if (source_dir / name).exists():
             shutil.copy2(source_dir / name, destination_dir / name)
     cfg = read_json(source_dir / "config.json")
