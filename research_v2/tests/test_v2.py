@@ -113,3 +113,111 @@ def test_modern_adapters_loss_inference_and_reload(architecture):
     with torch.inference_mode():prediction=model([image])[0]
     assert prediction["boxes"].shape[1] == 4
     assert ((prediction["labels"] >= 1)&(prediction["labels"] <= 3)).all()
+
+
+def test_adapter_autocast_policy_capabilities():
+    pytest.importorskip("transformers")
+    pytest.importorskip("ultralytics")
+    from roadresearch.adapters import RTDETRv2Detector, YOLODetector
+    assert RTDETRv2Detector.uses_fp32_forward is True
+    assert RTDETRv2Detector.autocast_supported is False
+    assert getattr(YOLODetector, "uses_fp32_forward", False) is False
+    assert getattr(YOLODetector, "autocast_supported", True) is True
+
+    base = config_load(ROOT / "configs/smoke_cpu.yaml")
+    cfg_frcnn = experiment_config(base, base["experiments"][0], 0)
+    model_frcnn = build_model(cfg_frcnn, pretrained=False)
+    assert getattr(model_frcnn, "autocast_supported", True) is True
+    assert getattr(model_frcnn, "uses_fp32_forward", False) is False
+
+
+def test_rtdetr_fp32_under_outer_fp16_autocast():
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    pytest.importorskip("transformers")
+    from transformers import RTDetrV2Config
+
+    base = config_load(ROOT / "configs/smoke_cpu.yaml")
+    cfg = experiment_config(base, base["experiments"][0], 0)
+    cfg["device"] = "cuda"
+    cfg["model"].update(architecture="rtdetr_v2_r50vd", input_size=64, geometry_mode="none")
+    cfg["model"]["hf_config"] = RTDetrV2Config(
+        num_labels=3, num_queries=20, decoder_layers=1, encoder_layers=1,
+        num_denoising=0, anchor_image_size=[64, 64], disable_custom_kernels=True
+    ).to_dict()
+
+    model = build_model(cfg, pretrained=False).cuda()
+    model.train()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    scaler = torch.amp.GradScaler("cuda", enabled=True)
+
+    image = torch.rand(3, 64, 96, device="cuda")
+    target = {
+        "boxes": torch.tensor([[10., 10., 40., 20.]], device="cuda"),
+        "labels": torch.tensor([2], device="cuda"),
+        "image_id": torch.tensor(1, device="cuda"),
+    }
+
+    # Verify training forward under outer FP16 autocast executes in FP32
+    optimizer.zero_grad(set_to_none=True)
+    with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=True):
+        losses = model([image, image], [target, target])
+        loss = sum(losses.values())
+
+    assert torch.isfinite(loss)
+    assert loss.dtype == torch.float32
+
+    # Verify GradScaler backward and optimizer step
+    scaler.scale(loss).backward()
+    scaler.unscale_(optimizer)
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0, error_if_nonfinite=True)
+    bad_grads = [p for p in model.parameters() if p.grad is not None and not torch.isfinite(p.grad).all()]
+    assert len(bad_grads) == 0
+    scaler.step(optimizer)
+    scaler.update()
+
+    # Verify inference under outer FP16 autocast produces valid finite boxes
+    model.eval()
+    with torch.inference_mode():
+        with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=True):
+            predictions = model([image])
+    assert len(predictions) == 1
+    pred = predictions[0]
+    assert torch.isfinite(pred["boxes"]).all()
+    assert torch.isfinite(pred["scores"]).all()
+    if len(pred["boxes"]) > 0:
+        assert (pred["boxes"][:, 2] > pred["boxes"][:, 0]).all()
+        assert (pred["boxes"][:, 3] > pred["boxes"][:, 1]).all()
+
+
+def test_rtdetr_defensive_diagnostics_on_nonfinite():
+    pytest.importorskip("transformers")
+    from transformers import RTDetrV2Config
+
+    base = config_load(ROOT / "configs/smoke_cpu.yaml")
+    cfg = experiment_config(base, base["experiments"][0], 0)
+    cfg["model"].update(architecture="rtdetr_v2_r50vd", input_size=64, geometry_mode="none")
+    cfg["model"]["hf_config"] = RTDetrV2Config(
+        num_labels=3, num_queries=20, decoder_layers=1, encoder_layers=1,
+        num_denoising=0, anchor_image_size=[64, 64], disable_custom_kernels=True
+    ).to_dict()
+
+    model = build_model(cfg, pretrained=False)
+    image = torch.rand(3, 64, 64)
+    target = {
+        "boxes": torch.tensor([[10., 10., 40., 20.]]),
+        "labels": torch.tensor([2]),
+        "image_id": torch.tensor(1),
+    }
+
+    # Inject NaN into loss to verify defensive diagnostic triggers FloatingPointError
+    orig_forward = model.network.forward
+    def mock_nan_loss(*args, **kwargs):
+        out = orig_forward(*args, **kwargs)
+        out.loss = torch.tensor(float("nan"))
+        return out
+    model.network.forward = mock_nan_loss
+    model.train()
+    with pytest.raises(FloatingPointError, match="Non-finite RT-DETR loss"):
+        model([image], [target])
+

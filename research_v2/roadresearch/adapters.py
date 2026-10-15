@@ -79,6 +79,9 @@ class YOLODetector(nn.Module):
 
 
 class RTDETRv2Detector(nn.Module):
+    uses_fp32_forward = True
+    autocast_supported = False
+
     def __init__(self, config, pretrained):
         super().__init__()
         from transformers import RTDetrImageProcessor, RTDetrV2Config, RTDetrV2ForObjectDetection
@@ -117,7 +120,38 @@ class RTDETRv2Detector(nn.Module):
         if "labels" in inputs:
             inputs["labels"] = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in label.items()}
                                 for label in inputs["labels"]]
-        outputs = self.network(**inputs)
+
+        try:
+            with torch.autocast(device_type=device.type, enabled=False):
+                outputs = self.network(**inputs)
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "nan" in msg or "boxes1 must be in" in msg or "corner" in msg:
+                image_ids = [int(t["image_id"].item()) if hasattr(t.get("image_id"), "item") else int(t["image_id"])
+                             for t in targets if "image_id" in t] if targets else []
+                raise FloatingPointError(
+                    f"Non-finite prediction encountered during RT-DETR forward/matcher: {exc} "
+                    f"(device={device}, autocast={torch.is_autocast_enabled()}, image_ids={image_ids})"
+                ) from exc
+            raise
+
+        if outputs.loss is not None and not torch.isfinite(outputs.loss):
+            image_ids = [int(t["image_id"].item()) if hasattr(t.get("image_id"), "item") else int(t["image_id"])
+                         for t in targets if "image_id" in t] if targets else []
+            raise FloatingPointError(
+                f"Non-finite RT-DETR loss: {outputs.loss} (device={device}, image_ids={image_ids})"
+            )
+        if hasattr(outputs, "pred_boxes") and outputs.pred_boxes is not None:
+            if not torch.isfinite(outputs.pred_boxes).all():
+                image_ids = [int(t["image_id"].item()) if hasattr(t.get("image_id"), "item") else int(t["image_id"])
+                             for t in targets if "image_id" in t] if targets else []
+                nan_count = int(torch.isnan(outputs.pred_boxes).sum().item())
+                inf_count = int(torch.isinf(outputs.pred_boxes).sum().item())
+                sample = outputs.pred_boxes[~torch.isfinite(outputs.pred_boxes)][:8].tolist()
+                raise FloatingPointError(
+                    f"Non-finite RT-DETR pred_boxes (nan={nan_count}, inf={inf_count}, sample={sample}, device={device}, image_ids={image_ids})"
+                )
+
         if self.training:
             # HF outputs.loss is already the weighted sum, including auxiliary layers.
             return {"loss_rtdetr_total": outputs.loss}

@@ -141,6 +141,11 @@ def train(config, run_dir, resume=False):
             cfg_match = (c1 == c2)
         if checkpoint["manifest_sha256"] != fingerprint or not cfg_match:
             raise ValueError("Resume requires the exact original config and manifest, including epochs and paths")
+        if checkpoint.get("finished"):
+            device = resolve_device(config["device"])
+            finalize_training(run_dir, config, checkpoint, device)
+            print(f"Already trained: {run_dir}")
+            return run_dir
     elif resume and (run_dir / "config.json").exists():
         raise ValueError("Run metadata exists but last.pt is missing; use a NEW output directory")
     elif (run_dir / "config.json").exists():
@@ -216,8 +221,12 @@ def train(config, run_dir, resume=False):
             images = [im.to(device, non_blocking=True) for im in images]
             targets = [{k: v.to(device, non_blocking=True) for k, v in target.items()} for target in targets]
             optimizer.zero_grad(set_to_none=True)
+            model_autocast = getattr(model, "autocast_supported", True) and not getattr(model, "uses_fp32_forward", False)
+            if hasattr(model, "detector"):
+                model_autocast = model_autocast and getattr(model.detector, "autocast_supported", True) and not getattr(model.detector, "uses_fp32_forward", False)
+            amp_enabled = scaler.is_enabled() and model_autocast
             with torch.autocast(device_type=device.type, dtype=torch.float16,
-                                enabled=scaler.is_enabled()):
+                                enabled=amp_enabled):
                 losses = model(images, targets)
                 loss = sum(losses.values())
             if not torch.isfinite(loss):
