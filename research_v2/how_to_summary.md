@@ -122,8 +122,24 @@ python run.py freeze-study \
 ```bash
 bash scripts/finalize.sh --protocol artifacts/study/protocol.json
 ```
-ผลลัพธ์ฉบับสมบูรณ์จะถูกบันทึกไว้ในโฟลเดอร์:
-`runs/paper_study_recovered/paper/`
+ผลลัพธ์ฉบับสมบูรณ์ถูกบันทึกไว้ในโฟลเดอร์: [`runs/paper_study_recovered/paper/`](file:///home/ds/Desktop/Road_Detection/research_v2/runs/paper_study_recovered/paper)
+- **ตารางสรุปผลสำหรับเปเปอร์**: [`paper_table.tex`](file:///home/ds/Desktop/Road_Detection/research_v2/runs/paper_study_recovered/paper/paper_table.tex)
+- **ตารางค่าเฉลี่ยและส่วนเบี่ยงเบนมาตรฐาน (Mean ± SD)**: [`summary_mean_std.csv`](file:///home/ds/Desktop/Road_Detection/research_v2/runs/paper_study_recovered/paper/summary_mean_std.csv)
+- **ผลการทดสอบนัยสำคัญทางสถิติ (Paired Bootstrap 1,000 repeats)**: [`statistical_comparisons.json`](file:///home/ds/Desktop/Road_Detection/research_v2/runs/paper_study_recovered/paper/statistical_comparisons.json)
+- **โปรโตคอลการวิจัยที่ถูกปิดอย่างสมบูรณ์**: [`frozen_study.json`](file:///home/ds/Desktop/Road_Detection/research_v2/runs/paper_study_recovered/paper/frozen_study.json)
+
+#### ตารางผลการทดสอบบนชุดข้อมูลทดสอบจริง (Final Test Set Ranking):
+
+| อันดับ | สถาปัตยกรรมโมเดล | Test COCO AP (Mean ± SD) | AP50 (Mean ± SD) | AP75 (Mean ± SD) | Macro F1 | Latency (ms) | จุดเด่น |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| 🥇 | **`fasterrcnn_detail`** | **0.2085 ± 0.0116** | **0.4382 ± 0.0198** | 0.1844 ± 0.0199 | **0.4497** | 17.93 | **อันดับ 1 Overall AP**, AP50 และ Shared Damage AP |
+| 🥈 | **`fasterrcnn_detail_geometry`** | **0.2077 ± 0.0046** | 0.4307 ± 0.0098 | **0.1956 ± 0.0041** | 0.4321 | 18.45 | **อันดับ 1 High-IoU AP75** และเสถียรที่สุด (SD ต่ำสุด) |
+| 3 | `fasterrcnn_aspect` | 0.1984 ± 0.0163 | 0.4215 ± 0.0326 | 0.1746 ± 0.0266 | 0.4328 | 18.05 | ดีกว่า Baseline ทั่วไป |
+| 4 | `fasterrcnn_geometry` | 0.1949 ± 0.0146 | 0.4121 ± 0.0468 | 0.1708 ± 0.0080 | 0.4448 | 17.88 | Macro F1 สูง |
+| 5 | `fasterrcnn_baseline` | 0.1929 ± 0.0092 | 0.4063 ± 0.0205 | 0.1616 ± 0.0161 | 0.4383 | 18.01 | มาตรฐาน Faster R-CNN |
+| 6 | `fcos_baseline` | 0.1641 ± 0.0070 | 0.3678 ± 0.0237 | 0.1211 ± 0.0057 | 0.3994 | 14.84 | Anchor-free ทางเลือก |
+| 7 | `yolo11s_baseline` | 0.1146 ± 0.0066 | 0.2316 ± 0.0120 | 0.1084 ± 0.0103 | 0.2617 | **4.65** | **เร็วที่สุดในกลุ่ม (~215 FPS)** |
+| 8 | `rtdetr_v2_baseline` | 0.1095 ± 0.0206 | 0.2297 ± 0.0425 | 0.0916 ± 0.0273 | 0.2746 | 18.05 | Transformer Detector |
 
 ### ขั้นตอนที่ 4.4: (ทางเลือก) ประเมิน Test Set เฉพาะโมเดลเดี่ยว
 ```bash
