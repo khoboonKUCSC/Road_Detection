@@ -103,6 +103,9 @@ python run.py audit-similarity \
 
 ### ขั้นตอนที่ 4.2: ตรึงโปรโตคอลการวิจัย (Freeze Study / Preregistration)
 คำสั่งนี้จะคำนวณและบันทึก Immutable Checksums ของ Config, Manifest, โมเดล และ Thresholds ที่ได้จาก Validation ไว้ใน `protocol.json` ก่อนที่จะเปิดดู Test Set:
+
+> สำหรับ run ที่ถูกย้ายด้วย `migrate` ให้ใช้โค้ดที่รองรับ migration-aware config validation ก่อน: run ที่มี `migration.json` อนุญาตให้ `output_root` ต่างจาก config เดิมได้เพียง field เดียว ส่วน model, seed, manifest และ training/evaluation settings ต้องตรงกันทั้งหมด ห้ามแก้ `config.json` ภายใน run, ห้ามลบ `migration.json` และห้ามเปลี่ยน `output_root` ใน YAML กลับไปยังโฟลเดอร์เดิมเพื่อเลี่ยงการตรวจสอบ
+
 ```bash
 python run.py freeze-study \
   --config configs/rtx4090_recovered.yaml \
@@ -111,6 +114,8 @@ python run.py freeze-study \
   --exploratory
 ```
 *(หมายเหตุ: ใส่แฟล็ก `--exploratory` หากชุดข้อมูลใช้ date proxy split)*
+
+หากพบข้อความ `Run config disagrees with frozen config` สำหรับ run ที่มี `migration.json` แม้ต่างกันเฉพาะ `output_root` ให้ใช้แนวทางแก้ใน `bugfix/4/freeze_study_migrated_output_root_config.md` แล้วจึงรันคำสั่งเดิมอีกครั้ง ไม่ควรแก้ metadata ของผลการรันด้วยมือ
 
 ### ขั้นตอนที่ 4.3: ปิดงานวิจัยและประเมินผลบน Test Set (Finalize Study)
 ทำการประเมินผลบน Test Set ของทุกโมเดล พร้อมคำนวณนัยสำคัญทางสถิติ (Paired Group Bootstrap 1,000 repeats สำหรับ p-values และ 95% Confidence Intervals) ตลอดจนสร้างตาราง LaTeX สำหรับเปเปอร์:
@@ -172,3 +177,7 @@ python run.py predict \
    - ปัญหา: `migrate_run` ไม่ได้คัดลอก `initialization.json` ทำให้ขั้นตอน `report()` เกิด `FileNotFoundError`
    - การแก้ไข: เพิ่ม `initialization.json` ในรายการไฟล์ migrate, ปรับปรุง Error Reporting ให้ระบุบริบทของรัน และกู้คืนไฟล์ของ `fasterrcnn_baseline_seed0`
    - รายงาน: [`report_missing_initialization_fix_result.md`](file:///home/ds/Desktop/Road_Detection/research_v2/bugfix/3/report_missing_initialization_fix_result.md)
+4. **[`bugfix/4/`](file:///home/ds/Desktop/Road_Detection/research_v2/bugfix/4/) — Freeze Study Migration-Aware Config Match**:
+   - ปัญหา: `freeze-study` ตรวจสอบ config แบบ strict equality ทุกฟิลด์ ทำให้ปฏิเสธรันที่ถูกย้ายมา (`fasterrcnn_baseline_seed0`) ซึ่งต่างจาก config ใหม่เฉพาะ `output_root`
+   - การแก้ไข: เพิ่มฟังก์ชัน `configs_match_for_run` ใน `roadresearch/protocol.py` (และใช้งานร่วมกันใน `roadresearch/engine.py`) เพื่ออนุญาตเฉพาะความต่างของ `output_root` เมื่อมี `migration.json` ที่ถูกต้อง และตรวจสอบความสอดคล้องของ provenance
+   - รายงาน: [`freeze_study_migrated_output_root_fix_result.md`](file:///home/ds/Desktop/Road_Detection/research_v2/bugfix/4/freeze_study_migrated_output_root_fix_result.md)

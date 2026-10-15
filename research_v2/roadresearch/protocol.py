@@ -6,6 +6,33 @@ from pathlib import Path
 from .utils import digest, read_json, save_json
 
 
+def configs_match_for_run(expected, actual, run_dir):
+    run_dir = Path(run_dir)
+    migration_path = run_dir / "migration.json"
+    if migration_path.exists():
+        try:
+            migration_meta = read_json(migration_path)
+        except Exception as exc:
+            raise ValueError(f"Malformed migration metadata in {run_dir}: {exc}") from exc
+        if not isinstance(migration_meta, dict):
+            raise ValueError(f"Malformed migration metadata in {run_dir}: root must be a JSON object")
+        migrated_from = migration_meta.get("migrated_from")
+        if not isinstance(migrated_from, str) or not migrated_from.strip():
+            raise ValueError(f"Malformed migration metadata in {run_dir}: missing or invalid 'migrated_from'")
+        if Path(migrated_from).name != run_dir.name:
+            raise ValueError(
+                f"Mismatched migration provenance in {run_dir}: "
+                f"migrated_from '{Path(migrated_from).name}' does not match run directory '{run_dir.name}'"
+            )
+        if actual == expected:
+            return True
+        return (
+            {k: v for k, v in actual.items() if k != "output_root"}
+            == {k: v for k, v in expected.items() if k != "output_root"}
+        )
+    return actual == expected
+
+
 def freeze_study(config, output, similarity_audit, decisions_csv=None, external_manifest=None, exploratory=False):
     import csv
     from .cli import experiment_config
@@ -49,7 +76,7 @@ def freeze_study(config, output, similarity_audit, decisions_csv=None, external_
                 raise ValueError(f"Finish development/validation first: {run}")
             if (run/"eval/test_metrics.json").exists():
                 raise ValueError(f"Test already opened before this preregistration: {run}. Use a new untouched test study.")
-            if read_json(run/"config.json") != experiment_config(config, experiment, seed):
+            if not configs_match_for_run(experiment_config(config, experiment, seed), read_json(run/"config.json"), run):
                 raise ValueError(f"Run config disagrees with frozen config: {run}")
             selection = read_json(run/"eval/thresholds.json")
             if selection.get("checkpoint_sha256") != digest(run/"best.pt") or selection.get("manifest_sha256") != digest(config["manifest"]):

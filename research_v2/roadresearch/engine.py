@@ -16,6 +16,7 @@ from torchvision.ops import batched_nms
 from .data import RoadDataset, collate, verify_manifest
 from .metrics import coco_evaluate, confusion_matrix, operating_metrics, select_thresholds
 from .models import build_model
+from .protocol import configs_match_for_run
 from .utils import (CLASSES, atomic_checkpoint, digest, environment, load_checkpoint,
                     read_json, resolve_device, save_json, seed_all, source_snapshot)
 
@@ -134,12 +135,7 @@ def train(config, run_dir, resume=False):
         if not resume:
             raise FileExistsError(f"Run exists: {run_dir}. Use --resume or a NEW output_root.")
         checkpoint = load_checkpoint(run_dir / "last.pt")
-        cfg_match = (checkpoint["config"] == config)
-        if not cfg_match and (run_dir / "migration.json").exists():
-            c1 = {k: v for k, v in checkpoint["config"].items() if k != "output_root"}
-            c2 = {k: v for k, v in config.items() if k != "output_root"}
-            cfg_match = (c1 == c2)
-        if checkpoint["manifest_sha256"] != fingerprint or not cfg_match:
+        if checkpoint["manifest_sha256"] != fingerprint or not configs_match_for_run(config, checkpoint["config"], run_dir):
             raise ValueError("Resume requires the exact original config and manifest, including epochs and paths")
         if checkpoint.get("finished"):
             device = resolve_device(config["device"])

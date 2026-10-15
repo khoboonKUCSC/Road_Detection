@@ -376,3 +376,155 @@ def test_report_missing_initialization_raises_contextual_error(tmp_path):
     assert "migrated run" in err_msg
     assert "/path/to/orig/fasterrcnn_baseline_seed0" in err_msg
 
+
+def test_configs_match_for_run_criteria(tmp_path):
+    from roadresearch.protocol import configs_match_for_run
+    from roadresearch.utils import save_json
+
+    expected = {
+        "output_root": "/new/runs_root",
+        "experiment": "fasterrcnn_baseline",
+        "seed": 0,
+        "manifest": "/path/to/manifest.json",
+        "model": {"architecture": "fasterrcnn_r50_fpn_v2", "geometry_mode": "none"},
+        "training": {"lr": 0.0002, "epochs": 20},
+    }
+    run_dir = tmp_path / "fasterrcnn_baseline_seed0"
+    run_dir.mkdir()
+
+    # 1. Equal expected/actual configs pass without migration.json
+    actual_equal = copy.deepcopy(expected)
+    assert configs_match_for_run(expected, actual_equal, run_dir) is True
+
+    # 2. A non-migrated run differing only in output_root fails
+    actual_diff_root = copy.deepcopy(expected)
+    actual_diff_root["output_root"] = "/old/runs_root"
+    assert configs_match_for_run(expected, actual_diff_root, run_dir) is False
+
+    # 3. A migrated run differing only in output_root passes
+    save_json(run_dir / "migration.json", {
+        "migrated_from": f"/old/runs_root/{run_dir.name}",
+        "reason": "AMP fix",
+    })
+    assert configs_match_for_run(expected, actual_diff_root, run_dir) is True
+
+    # 4. A migrated run with any additional changed field fails
+    # 4a. Changed seed
+    actual_bad_seed = copy.deepcopy(actual_diff_root)
+    actual_bad_seed["seed"] = 42
+    assert configs_match_for_run(expected, actual_bad_seed, run_dir) is False
+
+    # 4b. Changed training.lr
+    actual_bad_lr = copy.deepcopy(actual_diff_root)
+    actual_bad_lr["training"]["lr"] = 0.05
+    assert configs_match_for_run(expected, actual_bad_lr, run_dir) is False
+
+    # 4c. Changed model.architecture
+    actual_bad_arch = copy.deepcopy(actual_diff_root)
+    actual_bad_arch["model"]["architecture"] = "fcos_r50_fpn"
+    assert configs_match_for_run(expected, actual_bad_arch, run_dir) is False
+
+    # 5. A malformed/mismatched migration record fails if recommended provenance validation is implemented
+    # 5a. Mismatched run name
+    save_json(run_dir / "migration.json", {
+        "migrated_from": "/old/runs_root/different_experiment_seed0",
+    })
+    with pytest.raises(ValueError, match="Mismatched migration provenance"):
+        configs_match_for_run(expected, actual_diff_root, run_dir)
+
+    # 5b. Malformed migration record (missing migrated_from)
+    save_json(run_dir / "migration.json", {"reason": "missing source"})
+    with pytest.raises(ValueError, match="Malformed migration metadata"):
+        configs_match_for_run(expected, actual_diff_root, run_dir)
+
+    # 5c. Malformed JSON file
+    (run_dir / "migration.json").write_text("{not valid json")
+    with pytest.raises(ValueError, match="Malformed migration metadata"):
+        configs_match_for_run(expected, actual_diff_root, run_dir)
+
+
+def test_freeze_study_migration_integration(tmp_path):
+    from roadresearch.protocol import freeze_study
+    from roadresearch.utils import digest, save_json
+
+    manifest_path = tmp_path / "manifest.json"
+    save_json(manifest_path, {"records": [], "grouping_metadata_verified": True})
+    manifest_hash = digest(manifest_path)
+
+    audit_path = tmp_path / "similarity_audit.json"
+    save_json(audit_path, {
+        "manifest_sha256": manifest_hash,
+        "pairs": [],
+    })
+
+    runs_root = tmp_path / "runs_recovered"
+    run_dir = runs_root / "smoke_exp_seed0"
+    (run_dir / "eval").mkdir(parents=True)
+
+    base_config = {
+        "output_root": str(runs_root),
+        "manifest": str(manifest_path),
+        "seeds": [0],
+        "model": {},
+        "training": {},
+        "experiments": [{"name": "smoke_exp", "architecture": "fasterrcnn_r50_fpn_v2", "geometry_mode": "none"}],
+        "evaluation": {"tiling": False},
+        "study": {"bootstrap_repeats": 10},
+    }
+
+    from roadresearch.cli import experiment_config
+    expected_cfg = experiment_config(base_config, base_config["experiments"][0], 0)
+
+    # Stored run config has old output_root
+    stored_run_cfg = copy.deepcopy(expected_cfg)
+    stored_run_cfg["output_root"] = "/old/runs_root"
+    save_json(run_dir / "config.json", stored_run_cfg)
+
+    # Required development artifacts
+    (run_dir / "best.pt").write_bytes(b"checkpoint_weights")
+    ckpt_hash = digest(run_dir / "best.pt")
+    save_json(run_dir / "eval/val_metrics.json", {"AP": 0.2})
+    save_json(run_dir / "eval/thresholds.json", {
+        "checkpoint_sha256": ckpt_hash,
+        "manifest_sha256": manifest_hash,
+        "thresholds": {"pothole": 0.5, "crack": 0.5, "manhole": 0.5},
+    })
+
+    protocol_out = tmp_path / "study/protocol.json"
+
+    # Case 2: Non-migrated run differing only in output_root fails
+    with pytest.raises(ValueError, match="Run config disagrees with frozen config"):
+        freeze_study(base_config, protocol_out, audit_path, exploratory=True)
+    assert not protocol_out.exists()
+
+    # Case 4: Migrated run with additional changed field fails
+    save_json(run_dir / "migration.json", {"migrated_from": f"/old/runs_root/{run_dir.name}"})
+    stored_run_cfg_bad = copy.deepcopy(stored_run_cfg)
+    stored_run_cfg_bad["seed"] = 999
+    save_json(run_dir / "config.json", stored_run_cfg_bad)
+    with pytest.raises(ValueError, match="Run config disagrees with frozen config"):
+        freeze_study(base_config, protocol_out, audit_path, exploratory=True)
+    assert not protocol_out.exists()
+
+    # Case 5: Malformed/mismatched migration record fails
+    save_json(run_dir / "config.json", stored_run_cfg)
+    save_json(run_dir / "migration.json", {"migrated_from": "/old/runs_root/mismatched_run_seed0"})
+    with pytest.raises(ValueError, match="Mismatched migration provenance"):
+        freeze_study(base_config, protocol_out, audit_path, exploratory=True)
+    assert not protocol_out.exists()
+
+    # Case 3: Migrated run differing only in output_root passes and writes protocol
+    save_json(run_dir / "migration.json", {"migrated_from": f"/old/runs_root/{run_dir.name}"})
+    study = freeze_study(base_config, protocol_out, audit_path, exploratory=True)
+    assert protocol_out.exists()
+    assert study["entries"][0]["run"] == "smoke_exp_seed0"
+    # Ensure config.json in run_dir was untouched
+    assert read_json(run_dir / "config.json") == stored_run_cfg
+
+    # Rejects if test already opened
+    protocol_out_2 = tmp_path / "study/protocol_2.json"
+    save_json(run_dir / "eval/test_metrics.json", {"AP": 0.2})
+    with pytest.raises(ValueError, match="Test already opened"):
+        freeze_study(base_config, protocol_out_2, audit_path, exploratory=True)
+    assert not protocol_out_2.exists()
+

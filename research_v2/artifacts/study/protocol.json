@@ -1,0 +1,300 @@
+{
+  "schema_version": 2,
+  "config": {
+    "data_root": "/home/ds/Desktop/Road_Detection/data",
+    "manifest": "/home/ds/Desktop/Road_Detection/research_v2/artifacts/dataset/manifest.json",
+    "output_root": "/home/ds/Desktop/Road_Detection/research_v2/runs/paper_study_recovered",
+    "device": "cuda",
+    "seeds": [
+      0,
+      42,
+      2026
+    ],
+    "experiments": [
+      {
+        "name": "fasterrcnn_baseline",
+        "architecture": "fasterrcnn_r50_fpn_v2",
+        "geometry_mode": "none"
+      },
+      {
+        "name": "fasterrcnn_aspect",
+        "architecture": "fasterrcnn_r50_fpn_v2",
+        "geometry_mode": "aspect"
+      },
+      {
+        "name": "fasterrcnn_geometry",
+        "architecture": "fasterrcnn_r50_fpn_v2",
+        "geometry_mode": "full"
+      },
+      {
+        "name": "fasterrcnn_detail",
+        "architecture": "fasterrcnn_r50_fpn_v2",
+        "geometry_mode": "none",
+        "training_overrides": {
+          "crack_crop_probability": 0.5
+        }
+      },
+      {
+        "name": "fasterrcnn_detail_geometry",
+        "architecture": "fasterrcnn_r50_fpn_v2",
+        "geometry_mode": "full",
+        "training_overrides": {
+          "crack_crop_probability": 0.5
+        }
+      },
+      {
+        "name": "fcos_baseline",
+        "architecture": "fcos_r50_fpn",
+        "geometry_mode": "none"
+      },
+      {
+        "name": "yolo11s_baseline",
+        "architecture": "yolo11s",
+        "geometry_mode": "none",
+        "input_size": 640,
+        "weights_id": "yolo11s.pt",
+        "training_overrides": {
+          "lr": 0.001
+        }
+      },
+      {
+        "name": "rtdetr_v2_baseline",
+        "architecture": "rtdetr_v2_r50vd",
+        "geometry_mode": "none",
+        "input_size": 640,
+        "weights_id": "PekingU/rtdetr_v2_r50vd"
+      }
+    ],
+    "model": {
+      "pretrained": true,
+      "min_size": 640,
+      "max_size": 1138,
+      "score_floor": 0.001,
+      "geometry_weight": 0.2,
+      "crack_only": true,
+      "trainable_backbone_layers": 3
+    },
+    "training": {
+      "epochs": 80,
+      "patience": 15,
+      "batch_size": 4,
+      "workers": 4,
+      "lr": 0.0001,
+      "weight_decay": 0.0001,
+      "amp": true,
+      "grad_clip": 10.0,
+      "deterministic": true,
+      "cpu_threads": 4,
+      "val_every": 1,
+      "save_every": 20,
+      "limit_train": null,
+      "limit_eval": null,
+      "crack_crop_probability": 0.0,
+      "crack_crop_size": 256
+    },
+    "evaluation": {
+      "batch_size": 1,
+      "visualizations": 30,
+      "tiling": false,
+      "tile_size": 384,
+      "tile_overlap": 0.25,
+      "tile_nms": 0.5,
+      "include_full_image": true,
+      "warmup_images": 3
+    },
+    "study": {
+      "require_registration": true,
+      "bootstrap_repeats": 1000,
+      "comparisons": [
+        [
+          "fasterrcnn_baseline",
+          "fasterrcnn_detail"
+        ],
+        [
+          "fasterrcnn_baseline",
+          "fasterrcnn_geometry"
+        ],
+        [
+          "fasterrcnn_detail",
+          "fasterrcnn_detail_geometry"
+        ]
+      ]
+    }
+  },
+  "manifest_sha256": "b9ed848315815d0b7b22ccd7ab4b153a23da373895624614a334b6ba513ef980",
+  "similarity_audit_sha256": "fce767f6a9bea79fab860c358c2a1aa54fb22708dba9d83a9d7cfe0072830ed0",
+  "decisions_sha256": null,
+  "capture_metadata_verified": false,
+  "unresolved_similarity_pairs": [
+    [
+      "vlcsnap-00011.jpg",
+      "vlcsnap-2025-02-19-13h53m22s735.jpg"
+    ],
+    [
+      "vlcsnap-2025-02-18-17h02m17s009.jpg",
+      "vlcsnap-2025-02-26-20h32m26s663.jpg"
+    ]
+  ],
+  "exploratory": true,
+  "entries": [
+    {
+      "run": "fasterrcnn_baseline_seed0",
+      "checkpoint_sha256": "bd98f4356ed345cdaacbfc05cc151c553c3e1aab65e36125be090715312f9dbc",
+      "config_sha256": "4a494d62db54f66b114fe7738ab87eeaaba647961216bb518f449c0d921a314e",
+      "thresholds_sha256": "c2dc9face5b9b413c586bc79157a1d8a92433c4f46728045b27c16c8dffd2715"
+    },
+    {
+      "run": "fasterrcnn_baseline_seed42",
+      "checkpoint_sha256": "881b9e303b1645abcec97274bb1c3e85a494c0c744459db0cd78ab68f4ffc427",
+      "config_sha256": "da178c5844dd0b758bb012a57ec5a0a65b9a9f8c4be7a9b65afad90e1a72166b",
+      "thresholds_sha256": "78d4e40ec0692c4f947034ef0495c4c1e16dd4c27b6784f45539480aebca9acb"
+    },
+    {
+      "run": "fasterrcnn_baseline_seed2026",
+      "checkpoint_sha256": "962affb95b9c50e128b1ab9af348e8cf6b9954d3c82465b8e54a069614095d27",
+      "config_sha256": "2261ddc6dc0098138d966a447ee8c4befafbb905ed75d78a5dfe26864183dd07",
+      "thresholds_sha256": "78f3a56005f351b146e3445c567d41badb5030936471ce456d84eaaecb897e36"
+    },
+    {
+      "run": "fasterrcnn_aspect_seed0",
+      "checkpoint_sha256": "5fc238850bcd29f7b0c1af4fb07c99abb5b445586b7f262feb3e64907ea1f488",
+      "config_sha256": "ed2b99ec9719c2f66fd4b9a6c833f9210f1a3a89235e4a21b2b703b54e1a6ed0",
+      "thresholds_sha256": "29d169c9da3ebc8a3e50cb74e6c42983f11ca7f6f5a1403473e3ca21075a46ea"
+    },
+    {
+      "run": "fasterrcnn_aspect_seed42",
+      "checkpoint_sha256": "c5a8edb2c5ef197e3d1bb5fc9ac1cc92107fbd4c64b92fa68e8a3ac598d523e1",
+      "config_sha256": "c11843c4cf96f681c28c488404990aa83b83683474fd97d642d03c3c01e2764a",
+      "thresholds_sha256": "67fbd558ca0a604ce270d062e98248ac30c10d3ade51e324cdac4eced5e32fde"
+    },
+    {
+      "run": "fasterrcnn_aspect_seed2026",
+      "checkpoint_sha256": "fb031a543d854589ef419eaf193f0d109335a3fe6116f43105114b7ddb461004",
+      "config_sha256": "6724baa53218a31b1b7c7e26633307b49b652e25596a77a15564056ac8ebbd62",
+      "thresholds_sha256": "ef309101b8a167fc0d1bf6e4473a99aa0d6cd0aaf90b10b3542592e63af42869"
+    },
+    {
+      "run": "fasterrcnn_geometry_seed0",
+      "checkpoint_sha256": "ed2bbfa2a59e0d977446ac737143b81dc978ab486567821ea3d47749597900ad",
+      "config_sha256": "4c1bdc56e74eb97d0a1bcdaf13d21fc176bc1bd1dc8b01a521bfc2a92b185e07",
+      "thresholds_sha256": "e9ba6d10b0e83fd0fbe3a394e4131e196a117c5a80fe85847ec0a84957253006"
+    },
+    {
+      "run": "fasterrcnn_geometry_seed42",
+      "checkpoint_sha256": "0ffedd48d7dd51a44d63e8e61d81b631be84a0f997c8fe92135c57d7b5e8b0b6",
+      "config_sha256": "7229bd51869233c6a0793a551df582436877216561ce7a09c5f7d132bba7d978",
+      "thresholds_sha256": "4d7a55e5217f0d7bfc5520e6c072afd480842f958bd52ed78f3f39fa09fc2ec8"
+    },
+    {
+      "run": "fasterrcnn_geometry_seed2026",
+      "checkpoint_sha256": "a64110fbee166427ebc52d19ace6e568305fcc15f63057457b278385dc90f936",
+      "config_sha256": "3f23dd34410e9df53bb6fa0b5625610e9f248a202a958988fb1713cccade275a",
+      "thresholds_sha256": "c8a79a66d1c025bd72b65e77e13566bfb8f84b14593c63de2b7bd4759f8438a2"
+    },
+    {
+      "run": "fasterrcnn_detail_seed0",
+      "checkpoint_sha256": "c5ef3961a975a8b777806bf7324ce8e68fa891fe17754f9892792bcb80aa5b45",
+      "config_sha256": "1fd20165afddf1360576cd40226fe363789fdf35b3ad2f88dcafbbba598cae29",
+      "thresholds_sha256": "5082eabf613e31df8444ec99e8a7fc9a3ee2443505c46e43705ef7fc74c193d4"
+    },
+    {
+      "run": "fasterrcnn_detail_seed42",
+      "checkpoint_sha256": "8d21517175a3625b82c864d71ef90f43544381136de112f23b6df43008cf2b6e",
+      "config_sha256": "07e120c87c72ac445324d90878c93a7d4818a3ed4247486471086e8b306c4fea",
+      "thresholds_sha256": "213f0e1dd03e8cce77d2fd7ba41c89f012847a3e4facaf2831ccb66867296da2"
+    },
+    {
+      "run": "fasterrcnn_detail_seed2026",
+      "checkpoint_sha256": "905bd0997d0dae2f0d711f6fc2b830644d943567a3e68ffdd0f19c31cc4191f5",
+      "config_sha256": "ffae6b800e98aca32e9e234fafacb434728e02eed53e6f63d3fd294de5eb3d86",
+      "thresholds_sha256": "ea8f095af77e31bc3c55a934f045e1ef5eeb2cea5cf9e79f6a6166a67242503e"
+    },
+    {
+      "run": "fasterrcnn_detail_geometry_seed0",
+      "checkpoint_sha256": "45cf648c7b0ad0a16976bd1098a01778c7d25d9b528083eb41acf889ef2c738f",
+      "config_sha256": "e4dde58015585d612c1ece719ded35831d9ebac2600dc341d5e4bb83add27c89",
+      "thresholds_sha256": "81cd5057ec2dc2f6a4523b7a612a9840142aec143f54c03741ce3dcd726b9a99"
+    },
+    {
+      "run": "fasterrcnn_detail_geometry_seed42",
+      "checkpoint_sha256": "919408e5e74e3c2678334474db6f040adab94571bb429485f82f0b26ae397e31",
+      "config_sha256": "471f5f63345756e124a7c4224b6d5770824c1d19d732d1e82eb7d7d679cad220",
+      "thresholds_sha256": "f32c2bbf374237842b3dfae4400e282c117af19f2f48b29f98712b4a154fb3a5"
+    },
+    {
+      "run": "fasterrcnn_detail_geometry_seed2026",
+      "checkpoint_sha256": "e0595278a5a94ca4e7eae9da9f4d46761a693e509e3dd8254c8fdc3f176cf07c",
+      "config_sha256": "c6bf593c9047e87eaaa1f9fe7cea0d955788ef3d64c69b4c0c4a1f082dd54c67",
+      "thresholds_sha256": "b78a8a82baadc883a391684f6c981ccc0f9f1d55160607dd21cb0f39ef28d473"
+    },
+    {
+      "run": "fcos_baseline_seed0",
+      "checkpoint_sha256": "1261ada537c72a0807d3333471d6bb05becad9500eeaa45fd8b8b91f8f24caf3",
+      "config_sha256": "fa4b1eff024284181f647f598bf474e5a7f141e741add8d2d9ea8efef7af8611",
+      "thresholds_sha256": "d4f234f8ab261508c6d2e0b463d5ada69f0658b66c4f67e8e296abb557af97f9"
+    },
+    {
+      "run": "fcos_baseline_seed42",
+      "checkpoint_sha256": "7152f2ff20c3d2eb04e6f8bfe43ad1483588c92a0cde52de4e605c378edbf0bd",
+      "config_sha256": "d3c21d90e990cfffb9ce26a37d394bcd7ab41f5c8ca738da437cc6af047bdd4b",
+      "thresholds_sha256": "3cddcc890c4ce34486f57dfc8a5d3a99e23b29fbc02879edc3b24ddf997ea7e0"
+    },
+    {
+      "run": "fcos_baseline_seed2026",
+      "checkpoint_sha256": "22cdb1e065bd9ffc8b75dd20a30aa04d80c13bac6cf8118a044e5728f3b119e2",
+      "config_sha256": "bf5a6628c396f65930e5b15904674e8dcec51e3405e6da49c0ab2b361d56a05d",
+      "thresholds_sha256": "285940a9d103344439c8c5f6be49018f53df81218edbeb2913a105f17125f9e0"
+    },
+    {
+      "run": "yolo11s_baseline_seed0",
+      "checkpoint_sha256": "360b4098c5be301edce31d4557a87472ed2a77691798c4cbe58d001e1d909068",
+      "config_sha256": "6f84fcf8039ae55fc8638c4fe9572b2972ae59479d3a971a8e37a05c0407bebe",
+      "thresholds_sha256": "5e2d9f9d1dd3def8bfe48d75490f7a072148aa7a45021e68c59cd6343e7fa862"
+    },
+    {
+      "run": "yolo11s_baseline_seed42",
+      "checkpoint_sha256": "1e755493e843c8c3ed750aaf2367f877d33c45f9a4ea6d23035dae3a7115e0f7",
+      "config_sha256": "c92a59093fdc413fa86aa65f41f545e2a3a07f1c4512a5c8487139a51438e408",
+      "thresholds_sha256": "a2af8dea8c46a04992efdef407d9fa0f39bbdb24568db3c0d42a735d9afbdd76"
+    },
+    {
+      "run": "yolo11s_baseline_seed2026",
+      "checkpoint_sha256": "b047d53de6e8f034f5b4b14e4ed9e9d93d80f0424f8db76a5beca27e03e7da4f",
+      "config_sha256": "36311c1ded41a6a8f6e78e3da0c13c98c3de38b18fc86d5c93d37d487bb9b201",
+      "thresholds_sha256": "5ba749ab45b8ab85cd88a6dd7c7c40544efefd76ae5eacbcccaafb0262c5a168"
+    },
+    {
+      "run": "rtdetr_v2_baseline_seed0",
+      "checkpoint_sha256": "20a8655a50bcbb72c838f21148ca8d2bce8d3c9f56e4695c0f3abbb2504d3c61",
+      "config_sha256": "04b96453cc33134a6b417f6f6e2233def80898368ea6d6be44b436323d0cf430",
+      "thresholds_sha256": "1a17c324a19d99fb28cb4743107f0cef61d2a53e37cd4b39c95fce92a4922fca"
+    },
+    {
+      "run": "rtdetr_v2_baseline_seed42",
+      "checkpoint_sha256": "b107a707a211203d4bbe89297e67dc3207bb26876047b05a97936e885cb6efb8",
+      "config_sha256": "837a899aeadeb0e690113b3fab02d515f8948997a97c1a2691c469575f4edc4f",
+      "thresholds_sha256": "9b4d1fbe43b80e4f666b1f31a63b194a657c3f8d588f1276628231df23f1702e"
+    },
+    {
+      "run": "rtdetr_v2_baseline_seed2026",
+      "checkpoint_sha256": "56a8d36346a535e097ad5c4c80b4f84e1da7df3459425656b2e3283808c6426d",
+      "config_sha256": "4bfde5e3fbb3317b519e1a4335c6685ceee9ed23c94d723bb4a53b347bb3d257",
+      "thresholds_sha256": "50b062c2eec7d2ed01026e6db208dcf00a90d82aad0f1732a3ed4171d56f48ce"
+    }
+  ],
+  "primary_endpoint": "COCO bbox AP50:95",
+  "secondary_endpoints": [
+    "crack AP",
+    "AP50",
+    "validation-frozen macro F1",
+    "end-to-end latency"
+  ],
+  "bootstrap": {
+    "unit": "whole manifest group",
+    "paired": true,
+    "repeats": 1000
+  },
+  "external_manifest": null,
+  "external_manifest_sha256": null,
+  "interpretation": "Training seed SD and paired group percentile CI are distinct uncertainties; no guaranteed novelty or significant improvement."
+}
